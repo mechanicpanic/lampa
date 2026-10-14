@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"net"
 	"testing"
 
 	"lampa/internal/light"
@@ -41,5 +42,28 @@ func TestParseYeelight(t *testing.T) {
 	}
 	if _, ok := ParseYeelight([]byte("M-SEARCH * HTTP/1.1\r\nST: wifi_bulb\r\n\r\n")); ok {
 		t.Fatal("our own request accepted as a reply")
+	}
+}
+
+func TestProbeTargetsSweepSubnet(t *testing.T) {
+	// Some WiZ lamps (e.g. Hero, ESP20_SHRGB_01BT) ignore broadcast and only
+	// answer unicast, so every host of the local /24 is asked directly.
+	_, n, _ := net.ParseCIDR("192.168.1.9/24")
+	n.IP = net.ParseIP("192.168.1.9").To4()
+	got := map[string]bool{}
+	for _, a := range wizTargets([]*net.IPNet{n}) {
+		got[a.IP.String()] = true
+	}
+	for _, want := range []string{"192.168.1.17", "192.168.1.1", "192.168.1.254", "255.255.255.255", "192.168.1.255"} {
+		if !got[want] {
+			t.Fatalf("%s not probed", want)
+		}
+	}
+	if got["192.168.1.9"] || got["192.168.1.0"] {
+		t.Fatal("own address or network address probed")
+	}
+	_, big, _ := net.ParseCIDR("10.0.0.5/16")
+	if n := len(wizTargets([]*net.IPNet{big})); n > 300 {
+		t.Fatalf("a /16 must not be swept host by host (%d targets)", n)
 	}
 }

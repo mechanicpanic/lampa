@@ -77,10 +77,12 @@ func Discover(ctx context.Context, wait time.Duration) ([]Found, error) {
 		return nil, err
 	}
 	defer conn.Close()
-	wizAddr := &net.UDPAddr{IP: net.IPv4bcast, Port: 38899}
+	wizAddrs := wizTargets(localNets())
 	ssdpAddr := &net.UDPAddr{IP: net.IPv4(239, 255, 255, 250), Port: 1982}
 	probe := func() {
-		conn.WriteToUDP([]byte(`{"method":"getSystemConfig","params":{}}`), wizAddr)
+		for _, a := range wizAddrs {
+			conn.WriteToUDP([]byte(`{"method":"getSystemConfig","params":{}}`), a)
+		}
 		conn.WriteToUDP([]byte(ssdpSearch), ssdpAddr)
 	}
 	probe()
@@ -123,4 +125,49 @@ func Discover(ctx context.Context, wait time.Duration) ([]Found, error) {
 		return strings.Compare(a.Name, b.Name)
 	})
 	return out, nil
+}
+
+// wizTargets: broadcast, plus every host of our own /24 directly — some WiZ
+// lamps (Hero, ESP20_SHRGB_01BT) ignore broadcast and answer only unicast.
+func wizTargets(nets []*net.IPNet) []*net.UDPAddr {
+	out := []*net.UDPAddr{{IP: net.IPv4bcast, Port: 38899}}
+	for _, n := range nets {
+		ip := n.IP.To4()
+		if ip == nil {
+			continue
+		}
+		mask := n.Mask
+		if len(mask) == net.IPv6len {
+			mask = mask[12:]
+		}
+		bcast := make(net.IP, 4)
+		for i := range bcast {
+			bcast[i] = ip[i] | ^mask[i]
+		}
+		out = append(out, &net.UDPAddr{IP: bcast, Port: 38899})
+		for h := 1; h <= 254; h++ {
+			if byte(h) == ip[3] {
+				continue
+			}
+			out = append(out, &net.UDPAddr{IP: net.IPv4(ip[0], ip[1], ip[2], byte(h)), Port: 38899})
+		}
+	}
+	return out
+}
+
+func localNets() []*net.IPNet {
+	var out []*net.IPNet
+	ifaces, _ := net.Interfaces()
+	for _, ifc := range ifaces {
+		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := ifc.Addrs()
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
 }
