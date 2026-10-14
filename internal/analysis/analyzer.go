@@ -23,13 +23,16 @@ type Analyzer struct {
 	dt      time.Duration
 	frame   []float64
 
-	power    [NumBands]float64
-	bandNorm [NumBands]Normalizer
-	loudNorm Normalizer
-	onset    *onsetDetector
-	flux     float64       // combined novelty of the last frame
-	groupOf  [NumBands]int // 0 sub, 1 bass, 2 lowmid, 3 mid, 4 high
-	groupN   [5]int
+	power      [NumBands]float64
+	bandNorm   [NumBands]Normalizer
+	loudNorm   Normalizer
+	onset      *onsetDetector
+	flux       float64 // combined novelty of the last frame
+	tempo      *tempoTracker
+	build      buildMeter
+	totalPower float64
+	groupOf    [NumBands]int // 0 sub, 1 bass, 2 lowmid, 3 mid, 4 high
+	groupN     [5]int
 }
 
 func New(cfg Config) *Analyzer {
@@ -46,6 +49,7 @@ func New(cfg Config) *Analyzer {
 		frame: make([]float64, WindowSize),
 	}
 	a.onset = newOnsetDetector(a.spec, cfg.SampleRate)
+	a.tempo = newTempoTracker(float64(cfg.SampleRate) / HopSize)
 	for b, c := range a.spec.Centers {
 		g := 4
 		switch {
@@ -106,6 +110,9 @@ func (a *Analyzer) process() Features {
 	a.computeBands(&f)
 	k := 1 + (1 - a.cfg.Sensitivity)
 	f.OnsetLow, f.OnsetHigh, a.flux = a.onset.step(a.spec.Mag, f.Time, k)
+	f.BPM, f.BeatPhase, f.BarPhase, f.Confidence, f.Beat =
+		a.tempo.step(f.Time, a.flux, f.OnsetLow.Hit || f.OnsetHigh.Hit, a.cfg.Latency)
+	f.Build = a.build.step(toDB(a.totalPower), a.dt)
 	return f
 }
 
@@ -117,6 +124,7 @@ func (a *Analyzer) computeBands(f *Features) {
 		loudest = math.Max(loudest, a.bandNorm[b].PeakDB())
 		total += a.power[b]
 	}
+	a.totalPower = total
 	var sums [5]float64
 	for b := range a.bandNorm {
 		v := a.bandNorm[b].Step(a.power[b], a.dt, loudest-bandHeadroomDB)
