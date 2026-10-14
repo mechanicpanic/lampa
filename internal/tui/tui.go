@@ -42,6 +42,7 @@ type Model struct {
 	c          Controller
 	v          engine.View
 	width      int
+	height     int
 	picking    bool
 	apps       []audio.App
 	cursor     int
@@ -51,7 +52,7 @@ type Model struct {
 }
 
 func New(c Controller) Model {
-	return Model{c: c, v: c.View(), width: 80}
+	return Model{c: c, v: c.View(), width: 80, height: 24}
 }
 
 func tick() tea.Cmd {
@@ -66,7 +67,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.v = m.c.View()
 		return m, tick()
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
+		m.width, m.height = msg.Width, msg.Height
 	case appsMsg:
 		if msg.err != nil {
 			m.status = "источники: " + msg.err.Error()

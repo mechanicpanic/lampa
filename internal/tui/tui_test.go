@@ -112,8 +112,8 @@ func TestViewRenders(t *testing.T) {
 		Mode: "Pulse", Palette: "sunset", Sensitivity: 0.5, Latency: 60 * time.Millisecond,
 		Features: analysis.Features{BPM: 120, Confidence: 0.9},
 		Lamps: []engine.LampView{
-			{Info: light.Info{Name: "гостиная W3"}, Stats: light.Stats{Status: light.StatusOK, FPS: 20}, Brightness: 1},
-			{Info: light.Info{Name: "wiz-1"}, Stats: light.Stats{Status: light.StatusLost, Note: "нет ответа"}},
+			{Info: light.Info{Name: "гостиная W3"}, Enabled: true, Stats: light.Stats{Status: light.StatusOK, FPS: 20}, Brightness: 1},
+			{Info: light.Info{Name: "wiz-1"}, Enabled: true, Stats: light.Stats{Status: light.StatusLost, Note: "нет ответа"}},
 		},
 		History: []engine.Marker{{Beat: true}, {Low: true}, {High: true}},
 	}}
