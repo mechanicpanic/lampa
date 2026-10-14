@@ -25,7 +25,7 @@ func richView(lamps int) engine.View {
 		v.History = append(v.History, engine.Marker{Beat: i%47 == 0, Low: i%23 == 0, High: i%7 == 0})
 	}
 	for i := 0; i < lamps; i++ {
-		v.Lamps = append(v.Lamps, engine.LampView{Info: light.Info{ID: fmt.Sprint(i), Name: fmt.Sprintf("лампа-%d", i)},
+		v.Lamps = append(v.Lamps, engine.LampView{Info: light.Info{ID: fmt.Sprint(i), Name: fmt.Sprintf("lamp-%d", i)},
 			Enabled: i != 1, Color: color.RGB{R: 1, G: 0.5}, Brightness: 0.7,
 			Stats: light.Stats{Status: light.StatusOK, FPS: 20}})
 	}
@@ -72,7 +72,7 @@ func TestSpectrumFillsWidth(t *testing.T) {
 }
 
 func TestTooSmall(t *testing.T) {
-	if out := sized(richView(3), 30, 10); !strings.Contains(out, "маленькое") {
+	if out := sized(richView(3), 30, 10); !strings.Contains(out, "too small") {
 		t.Fatalf("tiny window:\n%s", out)
 	}
 }
@@ -80,7 +80,7 @@ func TestTooSmall(t *testing.T) {
 func TestAllLampsVisibleWhenWrapped(t *testing.T) {
 	out := sized(richView(7), 60, 40)
 	for i := 0; i < 7; i++ {
-		if !strings.Contains(out, fmt.Sprintf("лампа-%d", i)) {
+		if !strings.Contains(out, fmt.Sprintf("lamp-%d", i)) {
 			t.Fatalf("lamp %d missing:\n%s", i, out)
 		}
 	}
@@ -88,18 +88,18 @@ func TestAllLampsVisibleWhenWrapped(t *testing.T) {
 
 func TestShortWindowKeepsStatusAndAllLamps(t *testing.T) {
 	out := sized(richView(3), 46, 16)
-	if !strings.Contains(out, "палитра") {
+	if !strings.Contains(out, "palette") {
 		t.Fatalf("status line pushed out:\n%s", out)
 	}
 	for i := 0; i < 3; i++ {
-		if !strings.Contains(out, fmt.Sprintf("лампа-%d", i)) {
+		if !strings.Contains(out, fmt.Sprintf("lamp-%d", i)) {
 			t.Fatalf("lamp %d pushed out:\n%s", i, out)
 		}
 	}
 }
 
 func TestHelpWrapsBeforeDroppingLabels(t *testing.T) {
-	if out := sized(richView(3), 80, 30); !strings.Contains(out, "палитра") || !strings.Contains(out, "выход") {
+	if out := sized(richView(3), 80, 30); !strings.Contains(out, "palette") || !strings.Contains(out, "quit") {
 		t.Fatalf("labels dropped although two lines fit:\n%s", out)
 	}
 }

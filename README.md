@@ -1,31 +1,40 @@
-# lampa
+# lampa ✿
 
-Музыка с Mac → лампы Yeelight (music mode) и WiZ в реальном времени. TUI со спектром, долями и живыми плашками ламп.
+Your Mac's music → Yeelight and WiZ bulbs, in real time. A cozy terminal UI with a live spectrum, a beat ribbon and a card for every lamp.
 
-## Сборка
+[Русская версия](README.ru.md)
+
+- Listens to the whole system or a single app (Core Audio process tap, no BlackHole needed)
+- Finds the beat and lands flashes *on* it, with latency compensation
+- Yeelight via **music mode** — no 60 commands/min limit; WiZ via local UDP
+- Puts every lamp back the way it was when you quit
+
+## Build
 
 ```bash
 make            # bin/lampa-tap (Swift) + bin/lampa (Go)
 make test
 ```
 
-Нужны macOS ≥ 14.4, Go, Swift. При первом запуске macOS спросит разрешение на запись звука для терминала.
+Needs macOS ≥ 14.4, Go and Swift. On first run macOS asks to allow audio recording for your terminal.
 
-## Запуск
+## Run
 
 ```bash
-bin/lampa discover --save   # найти лампы и записать в ~/.config/lampa/config.toml
-bin/lampa                   # весь звук системы
-bin/lampa --dry             # без ламп, только экран
-bin/lampa --wav track.wav   # из файла
+bin/lampa discover --save   # find lamps, save them to ~/.config/lampa/config.toml
+bin/lampa                   # whole-system audio
+bin/lampa --dry             # no lamps, screen only
+bin/lampa --wav track.wav   # from a file
+bin/lampa --lang en         # English UI (default: Russian; press t to switch)
 ```
 
-Клавиши: `1–5` режим (Pulse, Spectrum, Chase, Ambient, Drop), `p` палитра, `←/→` чувствительность, `↑/↓` задержка света, `s` источник звука, `l` выбор ламп (вкл/выкл, запоминается), `d` поиск ламп, `space` пауза, `q` выход (лампы вернутся как были).
+Keys: `1–5` mode (Pulse, Spectrum, Chase, Ambient, Drop), `p` palette, `←/→` sensitivity, `↑/↓` light delay, `s` audio source, `l` choose lamps (on/off, remembered), `d` find lamps, `t` language, `space` pause, `q` quit (lamps go back to how they were).
 
-## Роли ламп
+## Lamp roles
 
-В конфиге `role = "bass" | "mid" | "high" | "lowmid" | "sub"` задаёт, за какой полосой лампа следит в режиме Spectrum.
+In the config, `role = "bass" | "mid" | "high" | "lowmid" | "sub"` sets which band a lamp follows in Spectrum mode.
 
-## Yeelight
+## Notes
 
-Включи «LAN Control» в приложении Yeelight. lampa сама переводит лампу в music mode (без лимита 60 команд/мин); если модель его не поддерживает, работает медленно и пишет об этом на плашке.
+- **Yeelight:** enable "LAN Control" in the Yeelight app. lampa switches the bulb to music mode itself; if a model doesn't support it, it runs slowly and says so on its card.
+- **WiZ:** some lamps (e.g. WiZ Hero) ignore broadcast discovery; lampa also asks every address on your /24 directly.

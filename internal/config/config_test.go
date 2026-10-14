@@ -14,7 +14,7 @@ func TestMissingFileGivesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Mode != "pulse" || c.Sensitivity != 0.5 || c.LatencyMS != 60 {
+	if c.Mode != "pulse" || c.Sensitivity != 0.5 || c.LatencyMS != 60 || c.Lang != "ru" {
 		t.Fatalf("%+v", c)
 	}
 }

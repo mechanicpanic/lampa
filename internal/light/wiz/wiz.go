@@ -119,9 +119,9 @@ func (b *Bulb) Status() (light.Status, string) {
 	defer b.mu.Unlock()
 	switch {
 	case b.lastSeen.IsZero():
-		return light.StatusConnecting, "ждём ответа"
+		return light.StatusConnecting, "waiting for reply"
 	case time.Since(b.lastSeen) > b.lost:
-		return light.StatusLost, "нет ответа"
+		return light.StatusLost, "no reply"
 	}
 	return light.StatusOK, ""
 }

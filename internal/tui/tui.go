@@ -10,6 +10,7 @@ import (
 
 	"lampa/internal/audio"
 	"lampa/internal/engine"
+	"lampa/internal/i18n"
 )
 
 type Controller interface {
@@ -24,6 +25,7 @@ type Controller interface {
 	SourceName() string
 	Discover(ctx context.Context) (added int, err error)
 	SetLampEnabled(id string, on bool)
+	SetLang(lang string) // remember the UI language
 }
 
 type tickMsg time.Time
@@ -70,15 +72,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 	case appsMsg:
 		if msg.err != nil {
-			m.status = "источники: " + msg.err.Error()
+			m.status = i18n.T("sources: ") + msg.err.Error()
 			return m, nil
 		}
 		m.picking, m.apps, m.cursor = true, msg.apps, 0
 	case discoveredMsg:
 		if msg.err != nil {
-			m.status = "поиск: " + msg.err.Error()
+			m.status = i18n.T("discovery: ") + msg.err.Error()
 		} else {
-			m.status = fmt.Sprintf("найдено новых ламп: %d", msg.added)
+			m.status = fmt.Sprintf(i18n.T("new lamps found: %d"), msg.added)
 		}
 	case tea.KeyMsg:
 		if m.picking {
@@ -132,6 +134,8 @@ func (m Model) updateKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.c.TogglePause()
 	case "l":
 		m.lamps, m.lampCursor = true, 0
+	case "t":
+		m.c.SetLang(string(i18n.Toggle()))
 	case "s":
 		c := m.c
 		return m, func() tea.Msg {
@@ -141,7 +145,7 @@ func (m Model) updateKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return appsMsg{apps, err}
 		}
 	case "d":
-		m.status = "ищу лампы…"
+		m.status = i18n.T("looking for lamps…")
 		c := m.c
 		return m, func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

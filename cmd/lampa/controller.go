@@ -57,7 +57,7 @@ func (c *controller) SetSource(app *audio.App) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.srcCancel = cancel
 	src := &audio.TapSource{Path: c.tapPath, OnError: c.tapError}
-	c.srcName, c.cfg.SourceBundle, c.srcErr = "вся система", "", ""
+	c.srcName, c.cfg.SourceBundle, c.srcErr = "whole system", "", ""
 	if app != nil {
 		src.PID = app.PID
 		c.srcName, c.cfg.SourceBundle = app.Name, app.BundleID
@@ -102,5 +102,13 @@ func (c *controller) SetLampEnabled(id string, on bool) {
 			c.cfg.Lamps[i].Disabled = !on
 		}
 	}
+	config.Save(c.cfgPath, c.cfg)
+}
+
+// SetLang remembers the UI language chosen in the TUI.
+func (c *controller) SetLang(lang string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cfg.Lang = lang
 	config.Save(c.cfgPath, c.cfg)
 }

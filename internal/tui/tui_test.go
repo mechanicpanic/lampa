@@ -12,6 +12,7 @@ import (
 	"lampa/internal/analysis"
 	"lampa/internal/audio"
 	"lampa/internal/engine"
+	"lampa/internal/i18n"
 	"lampa/internal/light"
 )
 
@@ -43,7 +44,8 @@ func (f *fakeCtl) Sources(context.Context) ([]audio.App, error) {
 	return []audio.App{{PID: 42, Name: "Spotify"}}, nil
 }
 func (f *fakeCtl) SetSource(a *audio.App) { f.source = a; f.calls = append(f.calls, "source") }
-func (f *fakeCtl) SourceName() string     { return "вся система" }
+func (f *fakeCtl) SourceName() string     { return "whole system" }
+func (f *fakeCtl) SetLang(l string)       { f.calls = append(f.calls, "lang "+l) }
 func (f *fakeCtl) SetLampEnabled(id string, on bool) {
 	f.calls = append(f.calls, fmt.Sprintf("lamp %s %v", id, on))
 }
@@ -112,15 +114,15 @@ func TestViewRenders(t *testing.T) {
 		Mode: "Pulse", Palette: "sunset", Sensitivity: 0.5, Latency: 60 * time.Millisecond,
 		Features: analysis.Features{BPM: 120, Confidence: 0.9},
 		Lamps: []engine.LampView{
-			{Info: light.Info{Name: "гостиная W3"}, Enabled: true, Stats: light.Stats{Status: light.StatusOK, FPS: 20}, Brightness: 1},
-			{Info: light.Info{Name: "wiz-1"}, Enabled: true, Stats: light.Stats{Status: light.StatusLost, Note: "нет ответа"}},
+			{Info: light.Info{Name: "living room W3"}, Enabled: true, Stats: light.Stats{Status: light.StatusOK, FPS: 20}, Brightness: 1},
+			{Info: light.Info{Name: "wiz-1"}, Enabled: true, Stats: light.Stats{Status: light.StatusLost, Note: "no reply"}},
 		},
 		History: []engine.Marker{{Beat: true}, {Low: true}, {High: true}},
 	}}
 	m := tea.Model(New(c))
 	m, _ = press(m, tea.WindowSizeMsg{Width: 100, Height: 30}, tickMsg(time.Now()))
 	out := m.View()
-	for _, s := range []string{"Pulse", "120 BPM", "гостиная W3", "wiz-1", "нет ответа", "нет звука", "sunset"} {
+	for _, s := range []string{"Pulse", "120 BPM", "living room W3", "wiz-1", "no reply", "no sound", "sunset"} {
 		if !strings.Contains(out, s) {
 			t.Fatalf("view lacks %q:\n%s", s, out)
 		}
@@ -147,15 +149,15 @@ func TestSpectrumRows(t *testing.T) {
 func TestLampPicker(t *testing.T) {
 	c := &fakeCtl{view: engine.View{Lamps: []engine.LampView{
 		{Info: light.Info{ID: "a", Name: "hero"}, Enabled: true},
-		{Info: light.Info{ID: "b", Name: "потолок"}, Enabled: false},
+		{Info: light.Info{ID: "b", Name: "ceiling"}, Enabled: false},
 	}}}
 	m := tea.Model(New(c))
 	m, _ = press(m, tickMsg(time.Now()))
-	if !strings.Contains(m.View(), "выключена") {
+	if !strings.Contains(m.View(), "sleeping") {
 		t.Fatalf("disabled lamp tile not marked:\n%s", m.View())
 	}
 	m, _ = press(m, runes("l"))
-	if out := m.View(); !strings.Contains(out, "Лампы") || !strings.Contains(out, "hero") || !strings.Contains(out, "потолок") {
+	if out := m.View(); !strings.Contains(out, "Lamps") || !strings.Contains(out, "hero") || !strings.Contains(out, "ceiling") {
 		t.Fatalf("lamp picker not shown:\n%s", out)
 	}
 	m, cmd := press(m, tea.KeyMsg{Type: tea.KeyDown}, tea.KeyMsg{Type: tea.KeySpace})
@@ -167,7 +169,29 @@ func TestLampPicker(t *testing.T) {
 		t.Fatalf("calls %v", c.calls)
 	}
 	m, _ = press(m, tea.KeyMsg{Type: tea.KeyEsc})
-	if strings.Contains(m.View(), "Лампы") {
+	if strings.Contains(m.View(), "Lamps") {
 		t.Fatal("picker still open after esc")
+	}
+}
+
+func TestLanguageToggle(t *testing.T) {
+	defer i18n.Set(i18n.EN)
+	i18n.Set(i18n.RU)
+	c := &fakeCtl{view: engine.View{Palette: "sunset", Lamps: []engine.LampView{{Info: light.Info{Name: "hero"}}}}}
+	m := tea.Model(New(c))
+	m, _ = press(m, tea.WindowSizeMsg{Width: 100, Height: 30}, tickMsg(time.Now()))
+	if out := m.View(); !strings.Contains(out, "палитра") || !strings.Contains(out, "выключена") {
+		t.Fatalf("russian expected:\n%s", out)
+	}
+	m, _ = press(m, runes("t"))
+	if out := m.View(); !strings.Contains(out, "palette") || !strings.Contains(out, "sleeping") || strings.Contains(out, "палитра") {
+		t.Fatalf("english expected after t:\n%s", out)
+	}
+	if last := c.calls[len(c.calls)-1]; last != "lang en" {
+		t.Fatalf("language not remembered: %v", c.calls)
+	}
+	press(m, runes("t"))
+	if i18n.Current() != i18n.RU || c.calls[len(c.calls)-1] != "lang ru" {
+		t.Fatalf("second t should go back to russian: %v", c.calls)
 	}
 }

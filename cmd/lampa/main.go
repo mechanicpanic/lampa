@@ -18,6 +18,7 @@ import (
 	"lampa/internal/config"
 	"lampa/internal/discovery"
 	"lampa/internal/engine"
+	"lampa/internal/i18n"
 	"lampa/internal/light"
 	"lampa/internal/light/wiz"
 	"lampa/internal/light/yeelight"
@@ -82,6 +83,14 @@ func disabledIDs(cfg config.Config) []string {
 	return ids
 }
 
+// chooseLang: --lang wins, then the config, then Russian.
+func chooseLang(flagValue string, cfg config.Config) i18n.Lang {
+	if flagValue != "" {
+		return i18n.Parse(flagValue)
+	}
+	return i18n.Parse(cfg.Lang)
+}
+
 func findTap(flagPath string) string {
 	if flagPath != "" {
 		return flagPath
@@ -113,6 +122,7 @@ func run(args []string) int {
 	wavPath := fs.String("wav", "", "play this WAV file instead of system audio")
 	cfgPath := fs.String("config", config.DefaultPath(), "config file")
 	tapFlag := fs.String("tap", "", "path to lampa-tap")
+	langFlag := fs.String("lang", "", "UI language: ru or en (default: from config, else ru)")
 	fs.Parse(args)
 
 	cfg, err := config.Load(*cfgPath)
@@ -120,6 +130,8 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "lampa: config: %v\n", err)
 		return 1
 	}
+	i18n.Set(chooseLang(*langFlag, cfg))
+	cfg.Lang = string(i18n.Current())
 	eng := engine.New(engine.Options{
 		Lights:      buildLights(cfg, *dry),
 		Disabled:    disabledIDs(cfg),
@@ -193,21 +205,25 @@ func runDiscover(args []string) int {
 	fs := flag.NewFlagSet("discover", flag.ExitOnError)
 	save := fs.Bool("save", false, "add found lamps to the config")
 	cfgPath := fs.String("config", config.DefaultPath(), "config file")
+	langFlag := fs.String("lang", "", "output language: ru or en")
 	fs.Parse(args)
+	if cfg, err := config.Load(*cfgPath); err == nil {
+		i18n.Set(chooseLang(*langFlag, cfg))
+	}
 	found, err := discovery.Discover(context.Background(), 3*time.Second)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lampa: %v\n", err)
 		return 1
 	}
 	if len(found) == 0 {
-		fmt.Println("ламп не найдено (WiZ: включено ли локальное управление? Yeelight: LAN Control в приложении)")
+		fmt.Println(i18n.T("no lamps found (WiZ: is local control on? Yeelight: enable LAN Control in the app)"))
 	}
 	for _, f := range found {
 		music := ""
 		if f.Kind == light.KindYeelight {
-			music = " music mode: нет"
+			music = i18n.T(" music mode: no")
 			if f.Music {
-				music = " music mode: да"
+				music = i18n.T(" music mode: yes")
 			}
 		}
 		fmt.Printf("%-9s %-16s %-20s %s%s\n", f.Kind, f.IP, f.Name, f.Model, music)
@@ -223,7 +239,7 @@ func runDiscover(args []string) int {
 			fmt.Fprintf(os.Stderr, "lampa: %v\n", err)
 			return 1
 		}
-		fmt.Printf("добавлено в %s: %d\n", *cfgPath, n)
+		fmt.Printf(i18n.T("added to %s: %d\n"), *cfgPath, n)
 	}
 	return 0
 }

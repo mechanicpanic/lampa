@@ -10,6 +10,7 @@ import (
 
 	"lampa/internal/color"
 	"lampa/internal/engine"
+	"lampa/internal/i18n"
 	"lampa/internal/light"
 )
 
@@ -61,7 +62,7 @@ func paletteByName(name string) color.Palette {
 func (m Model) View() string {
 	w, h := m.width, m.height
 	if w < minWidth || h < minHeight {
-		msg := "окно маленькое ✿ растяни меня"
+		msg := i18n.T("window too small ✿ stretch me")
 		return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, ansi.Truncate(soft.Render(msg), w, ""))
 	}
 	inner := w - 4 // rounded border + one space of padding on each side
@@ -122,7 +123,7 @@ func (m Model) header(inner int) string {
 		bpm = fmt.Sprintf("%.0f BPM", v.Features.BPM)
 	}
 	left := accent.Render("✿ lampa") + "  " + soft.Render(modeIcons[v.Mode]+" "+v.Mode) + dim.Render(" · ") + bpm + " " + heart
-	right := dim.Render("♪ " + m.c.SourceName())
+	right := dim.Render("♪ " + i18n.T(m.c.SourceName()))
 	gap := inner - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 2 {
 		return left
@@ -191,7 +192,7 @@ func ribbon(h []engine.Marker, width int) string {
 
 func (m Model) tiles(inner, avail int) []string {
 	if len(m.v.Lamps) == 0 {
-		return []string{warn.Render("ламп пока нет — нажми d, и я поищу ✿")}
+		return []string{warn.Render(i18n.T("no lamps yet — press d and I'll look ✿"))}
 	}
 	if cards := m.cards(inner); len(cards) <= avail {
 		return cards
@@ -265,15 +266,15 @@ func tile(l engine.LampView, width int) string {
 	case !l.Enabled:
 		frame = border
 		bar = dim.Render(strings.Repeat("░", cw))
-		status = dim.Render("💤 выключена")
+		status = dim.Render(i18n.T("💤 sleeping"))
 	case l.Stats.Status == light.StatusLost:
-		status = warn.Render("✕ потеряна")
+		status = warn.Render(i18n.T("✕ lost"))
 	case l.Stats.Status == light.StatusConnecting:
-		status = dim.Render("… ищу")
+		status = dim.Render(i18n.T("… looking"))
 	}
 	lines := []string{bar, ansi.Truncate(l.Info.Name, cw, "…"), ansi.Truncate(status, cw, "…")}
 	if l.Stats.Note != "" && l.Enabled {
-		lines = append(lines, ansi.Truncate(dim.Render(l.Stats.Note), cw, "…"))
+		lines = append(lines, ansi.Truncate(dim.Render(i18n.T(l.Stats.Note)), cw, "…"))
 	}
 	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(frame).
 		Width(cw).Render(strings.Join(lines, "\n"))
@@ -282,15 +283,15 @@ func tile(l engine.LampView, width int) string {
 func (m Model) statusLine() []string {
 	v := m.v
 	parts := []string{
-		"палитра " + soft.Render(v.Palette),
-		fmt.Sprintf("чувств. %.2f", v.Sensitivity),
-		fmt.Sprintf("задержка %+d мс", v.Latency.Milliseconds()),
+		i18n.T("palette") + " " + soft.Render(v.Palette),
+		fmt.Sprintf(i18n.T("sens %.2f"), v.Sensitivity),
+		fmt.Sprintf(i18n.T("delay %+d ms"), v.Latency.Milliseconds()),
 	}
 	if v.Paused {
-		parts = append(parts, warn.Render("⏸ пауза"))
+		parts = append(parts, warn.Render(i18n.T("⏸ paused")))
 	}
 	if !v.AudioAlive {
-		parts = append(parts, soft.Render("нет звука — включи музыку ♪"))
+		parts = append(parts, soft.Render(i18n.T("no sound — play some music ♪")))
 	}
 	out := []string{strings.Join(parts, dim.Render(" · "))}
 	if m.status != "" {
@@ -300,18 +301,18 @@ func (m Model) statusLine() []string {
 }
 
 var helpKeys = [][2]string{
-	{"1-5", "режим"}, {"p", "палитра"}, {"←→", "чувств."}, {"↑↓", "задержка"},
-	{"s", "источник"}, {"l", "лампы"}, {"d", "поиск"}, {"␣", "пауза"}, {"q", "выход"},
+	{"1-5", "mode"}, {"p", "palette"}, {"←→", "sens"}, {"↑↓", "delay"},
+	{"s", "source"}, {"l", "lamps"}, {"d", "find"}, {"␣", "pause"}, {"t", "lang"}, {"q", "quit"},
 }
 
-// helpLines: full labels if they fit, otherwise keys only.
+// helpLines: full labels on one or two lines if they fit, otherwise keys only.
 func helpLines(inner int) []string {
 	render := func(keys [][2]string, labels bool) string {
 		var parts []string
 		for _, k := range keys {
 			p := soft.Render(k[0])
 			if labels {
-				p += " " + dim.Render(k[1])
+				p += " " + dim.Render(i18n.T(k[1]))
 			}
 			parts = append(parts, p)
 		}
@@ -329,8 +330,8 @@ func helpLines(inner int) []string {
 }
 
 func (m Model) pickerView() []string {
-	out := []string{accent.Render("♪ Источник звука"), ""}
-	items := []string{"вся система"}
+	out := []string{accent.Render(i18n.T("♪ Audio source")), ""}
+	items := []string{i18n.T("whole system")}
 	for _, a := range m.apps {
 		items = append(items, fmt.Sprintf("%s %s", a.Name, dim.Render(fmt.Sprintf("(pid %d)", a.PID))))
 	}
@@ -341,11 +342,11 @@ func (m Model) pickerView() []string {
 		}
 		out = append(out, cursor+it)
 	}
-	return append(out, "", dim.Render("↑↓ выбрать · enter ок · esc отмена"))
+	return append(out, "", dim.Render(i18n.T("↑↓ choose · enter ok · esc cancel")))
 }
 
 func (m Model) lampPickerView() []string {
-	out := []string{accent.Render("✿ Лампы"), ""}
+	out := []string{accent.Render(i18n.T("✿ Lamps")), ""}
 	for i, l := range m.v.Lamps {
 		cursor := "  "
 		if i == m.lampCursor {
@@ -358,7 +359,7 @@ func (m Model) lampPickerView() []string {
 		out = append(out, fmt.Sprintf("%s%s %-14s %s", cursor, mark, l.Info.Name, dim.Render(l.Info.Model)))
 	}
 	if len(m.v.Lamps) == 0 {
-		out = append(out, dim.Render("ламп нет — закрой и нажми d"))
+		out = append(out, dim.Render(i18n.T("no lamps — close this and press d")))
 	}
-	return append(out, "", dim.Render("↑↓ выбрать · space вкл/выкл · esc закрыть"))
+	return append(out, "", dim.Render(i18n.T("↑↓ choose · space on/off · esc close")))
 }

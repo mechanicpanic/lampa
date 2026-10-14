@@ -10,6 +10,7 @@ import (
 
 	"lampa/internal/config"
 	"lampa/internal/engine"
+	"lampa/internal/i18n"
 	"lampa/internal/light"
 )
 
@@ -98,5 +99,25 @@ func TestSetLampEnabledPersists(t *testing.T) {
 	c.SetLampEnabled("b", true)
 	if saved, _ = config.Load(path); saved.Lamps[1].Disabled {
 		t.Fatal("re-enable not saved")
+	}
+}
+
+func TestSetLangPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.toml")
+	c := &controller{cfgPath: path, cfg: config.Default()}
+	c.SetLang("en")
+	if saved, _ := config.Load(path); saved.Lang != "en" {
+		t.Fatalf("lang not saved: %+v", saved)
+	}
+}
+
+func TestLangFlagOverridesConfig(t *testing.T) {
+	cfg := config.Default()
+	cfg.Lang = "en"
+	if got := chooseLang("", cfg); got != i18n.EN {
+		t.Fatalf("config ignored: %s", got)
+	}
+	if got := chooseLang("ru", cfg); got != i18n.RU {
+		t.Fatalf("flag ignored: %s", got)
 	}
 }

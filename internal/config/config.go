@@ -31,11 +31,12 @@ type Config struct {
 	Sensitivity  float64 `toml:"sensitivity"`
 	LatencyMS    int     `toml:"latency_ms"`
 	SourceBundle string  `toml:"source_bundle,omitempty"`
+	Lang         string  `toml:"lang"` // "ru" or "en"
 	Lamps        []Lamp  `toml:"lamp"`
 }
 
 func Default() Config {
-	return Config{Mode: "pulse", Palette: "sunset", Sensitivity: 0.5, LatencyMS: 60}
+	return Config{Mode: "pulse", Palette: "sunset", Sensitivity: 0.5, LatencyMS: 60, Lang: "ru"}
 }
 
 func DefaultPath() string {

@@ -111,7 +111,7 @@ func (b *Bulb) loop(done chan struct{}) {
 		backoff = b.backoffMin
 		note := ""
 		if !b.music {
-			note = "без music mode: ≈0,5 кадра/с"
+			note = "no music mode: ≈0.5 fps"
 		}
 		b.mu.Lock()
 		if isDone(done) { // shutdown raced with connect
@@ -160,12 +160,12 @@ func (b *Bulb) connect() (net.Conn, error) {
 	if line, err := bufio.NewReader(ctrl).ReadString('\n'); err != nil {
 		return nil, fmt.Errorf("set_music: %w", err)
 	} else if strings.Contains(line, `"error"`) {
-		return nil, fmt.Errorf("set_music отклонён: %s", strings.TrimSpace(line))
+		return nil, fmt.Errorf("set_music rejected: %s", strings.TrimSpace(line))
 	}
 	ln.SetDeadline(time.Now().Add(acceptWait))
 	conn, err := ln.Accept()
 	if err != nil {
-		return nil, fmt.Errorf("лампа не подключилась в music mode: %w", err)
+		return nil, fmt.Errorf("bulb did not connect back in music mode: %w", err)
 	}
 	if _, err := conn.Write(b.cmd("set_power", "on", "sudden", 30)); err != nil {
 		conn.Close()
