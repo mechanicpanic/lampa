@@ -92,3 +92,36 @@ func TestBuild(t *testing.T) {
 		t.Fatalf("crescendo build %.2f", b)
 	}
 }
+
+// fourOnFloor: kick on every beat, open hat on every off-beat.
+func fourOnFloor(bpm, start, seconds float64, rate int) ([]float32, []float64) {
+	out := silence(seconds, rate)
+	var beats []float64
+	period := 60 / bpm
+	for t := start; t < seconds; t += period {
+		burst(out, int(t*float64(rate)), 55, 0.8, 0.15, rate)
+		if h := t + period/2; h < seconds {
+			burst(out, int(h*float64(rate)), 7000, 0.5, 0.09, rate)
+		}
+		beats = append(beats, t)
+	}
+	return out, beats
+}
+
+func TestBeatGridFollowsKicksNotOffbeatHats(t *testing.T) {
+	for _, bpm := range []float64{122, 124, 128} {
+		for _, start := range []float64{0.1, 0.23, 0.37, 0.41, 0.5} {
+			sig, truth := fourOnFloor(bpm, start, 30, rate)
+			fs := pushAll(New(Config{SampleRate: rate}), sig, 1024)
+			errs := beatErrors(beatTimes(fs), truth, 15, 29, 0)
+			abs := make([]float64, len(errs))
+			for i, e := range errs {
+				abs[i] = math.Abs(e)
+			}
+			slices.Sort(abs)
+			if med := abs[len(abs)/2]; med > 0.030 {
+				t.Errorf("bpm %.0f start %.2f: median error %.0f ms (grid on the off-beat?)", bpm, start, med*1000)
+			}
+		}
+	}
+}

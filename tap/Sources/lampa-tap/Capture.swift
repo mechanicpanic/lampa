@@ -61,6 +61,13 @@ final class Capture {
             fputs("lampa-tap: output device changed, exiting\n", stderr)
             self?.stopAndExit(0)
         }
+        // Same device, new sample rate (Audio MIDI Setup, lossless players):
+        // our header would be stale, so exit and let Go restart us.
+        var rateAddr = address(kAudioDevicePropertyNominalSampleRate)
+        AudioObjectAddPropertyListenerBlock(output, &rateAddr, queue) { [weak self] _, _ in
+            fputs("lampa-tap: sample rate changed, exiting\n", stderr)
+            self?.stopAndExit(0)
+        }
     }
 
     private func handle(_ input: UnsafePointer<AudioBufferList>, nonInterleaved: Bool) {

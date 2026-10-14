@@ -63,7 +63,7 @@ func newOnsetDetector(spec *Spectrum, rate int) *onsetDetector {
 	}
 }
 
-func (d *onsetDetector) step(mag []float64, now time.Duration, k float64) (low, high Onset, flux float64) {
+func (d *onsetDetector) step(mag []float64, now time.Duration, k float64) (low, high Onset, fluxLow, fluxHigh float64) {
 	fluxOf := func(b *fluxBand) float64 {
 		s := 0.0
 		for i := b.lo; i < b.hi; i++ {
@@ -81,7 +81,7 @@ func (d *onsetDetector) step(mag []float64, now time.Duration, k float64) (low, 
 		d.prev[i] = math.Log1p(onsetGamma * m)
 	}
 	d.havePrev = true
-	return d.decide(&d.low, fl, now, k), d.decide(&d.high, fh, now, k), fl + fh
+	return d.decide(&d.low, fl, now, k), d.decide(&d.high, fh, now, k), fl, fh
 }
 
 func (d *onsetDetector) decide(b *fluxBand, flux float64, now time.Duration, k float64) Onset {

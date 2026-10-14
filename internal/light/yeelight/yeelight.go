@@ -40,6 +40,7 @@ type Bulb struct {
 	nextID     atomic.Int64
 	done       chan struct{}
 	stopOnce   sync.Once
+	startOnce  sync.Once
 
 	mu     sync.Mutex
 	stream net.Conn
@@ -60,7 +61,6 @@ func newBulb(addr string, info light.Info, music bool, bmin, bmax time.Duration)
 	}
 	b := &Bulb{info: info, addr: addr, music: music, backoffMin: bmin, backoffMax: bmax,
 		done: make(chan struct{}), status: light.StatusConnecting}
-	go b.loop()
 	return b
 }
 
@@ -173,7 +173,14 @@ func (b *Bulb) connect() (net.Conn, error) {
 	return conn, nil
 }
 
+// Apply starts streaming on first use, so Snapshot (taken before the first
+// frame) sees the bulb as the user left it, not after our set_power on.
 func (b *Bulb) Apply(_ context.Context, f light.Frame) error {
+	b.startOnce.Do(func() {
+		if !b.stopped() {
+			go b.loop()
+		}
+	})
 	b.mu.Lock()
 	conn := b.stream
 	b.mu.Unlock()

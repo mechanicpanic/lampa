@@ -28,21 +28,29 @@ type tempoTracker struct {
 	next   time.Duration
 	beats  int
 	lastOn time.Duration
+	// low-band (kick) novelty, same ring layout as env; anchors the phase
+	low       []float64
+	lastLowOn time.Duration
+	haveLowOn bool
 }
 
 func newTempoTracker(fps float64) *tempoTracker {
-	return &tempoTracker{fps: fps, env: make([]float64, int(tempoWindow.Seconds()*fps))}
+	n := int(tempoWindow.Seconds() * fps)
+	return &tempoTracker{fps: fps, env: make([]float64, n), low: make([]float64, n)}
 }
 
-func (t *tempoTracker) ordered() []float64 {
+func (t *tempoTracker) ordered() []float64 { return t.chrono(t.env) }
+
+// chrono returns a ring buffer (sharing pos/filled) oldest first.
+func (t *tempoTracker) chrono(ring []float64) []float64 {
 	if !t.filled {
-		return t.env[:t.pos]
+		return ring[:t.pos]
 	}
-	return append(append([]float64{}, t.env[t.pos:]...), t.env[:t.pos]...)
+	return append(append([]float64{}, ring[t.pos:]...), ring[:t.pos]...)
 }
 
 // estimate updates period and confidence from the onset envelope.
-func (t *tempoTracker) estimate() {
+func (t *tempoTracker) estimate(now time.Duration) {
 	x := t.ordered()
 	if len(x) < int(4*t.fps) {
 		return
@@ -91,24 +99,90 @@ func (t *tempoTracker) estimate() {
 	p := time.Duration(lag / t.fps * float64(time.Second))
 	if t.period == 0 || math.Abs(float64(p-t.period))/float64(t.period) > 0.05 {
 		t.period = p
-		t.next = t.lastOn + p
+		t.next = t.anchor() + p
 	} else {
 		t.period = (t.period*3 + p) / 4
 	}
+	t.alignPhase(now)
 }
 
-func (t *tempoTracker) step(now time.Duration, flux float64, onset bool, latency time.Duration) (bpm, phase, bar, conf float64, beat bool) {
+// anchor is the latest onset to hang the beat grid on: kicks when the
+// track has them, any onset otherwise.
+func (t *tempoTracker) anchor() time.Duration {
+	if t.haveLowOn {
+		return t.lastLowOn
+	}
+	return t.lastOn
+}
+
+// alignPhase picks the grid offset whose beats carry the most low-band
+// energy (comb over the kick envelope). The PLL only corrects small errors,
+// so without this a grid started on an off-beat hat would stay there.
+func (t *tempoTracker) alignPhase(now time.Duration) {
+	x := t.chrono(t.low)
+	n := len(x)
+	L := t.period.Seconds() * t.fps
+	if L < 2 || float64(n) < 2*L {
+		return
+	}
+	score := func(phi float64) float64 {
+		s := 0.0
+		for k := 0.0; ; k++ {
+			i := n - 1 - int(math.Round(phi+k*L))
+			if i < 1 {
+				return s
+			}
+			v := max(x[i], x[i-1])
+			if i+1 < n {
+				v = max(v, x[i+1])
+			}
+			s += v
+		}
+	}
+	best, bestS := 0.0, -1.0
+	for phi := 0.0; phi < L; phi++ {
+		if s := score(phi); s > bestS {
+			best, bestS = phi, s
+		}
+	}
+	if anti := score(math.Mod(best+L/2, L)); bestS <= 1e-9 || bestS < 1.2*anti {
+		return // no kicks, or no clear winner between beat and off-beat
+	}
+	nn := now - time.Duration(best/t.fps*float64(time.Second)) + t.period
+	for nn <= now {
+		nn += t.period
+	}
+	d := time.Duration(math.Mod(float64(nn-t.next), float64(t.period)))
+	if d >= t.period/2 {
+		d -= t.period
+	} else if d < -t.period/2 {
+		d += t.period
+	}
+	if absDur(d) > t.period/4 {
+		t.next += d
+	}
+}
+
+func (t *tempoTracker) step(now time.Duration, flux, lowFlux float64, onset, lowOnset bool, latency time.Duration) (bpm, phase, bar, conf float64, beat bool) {
 	t.env[t.pos] = flux
+	t.low[t.pos] = lowFlux
 	t.pos++
 	if t.pos == len(t.env) {
 		t.pos, t.filled = 0, true
 	}
 	t.frames++
 	if t.frames%int(t.fps/2) == 0 {
-		t.estimate()
+		t.estimate(now)
 	}
 	if onset {
 		t.lastOn = now - onsetBias
+	}
+	if lowOnset {
+		t.lastLowOn, t.haveLowOn = now-onsetBias, true
+	}
+	// With kicks present, only kicks steer the grid; off-beat hats don't.
+	if t.haveLowOn && now-t.lastLowOn < 2*time.Second {
+		onset = lowOnset
 	}
 	if t.period == 0 || t.conf == 0 {
 		return 0, 0, 0, t.conf, false

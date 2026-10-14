@@ -15,6 +15,8 @@ import (
 type fakeLight struct {
 	info     light.Info
 	hang     bool // Snapshot blocks until ctx is done (offline lamp)
+	offline  int  // Snapshot fails this many times, then the lamp "comes online"
+	snaps    int
 	mu       sync.Mutex
 	applied  int
 	restored []light.State
@@ -31,6 +33,13 @@ func (f *fakeLight) Apply(context.Context, light.Frame) error {
 func (f *fakeLight) Snapshot(ctx context.Context) (light.State, error) {
 	if f.hang {
 		<-ctx.Done()
+		return light.State{}, errors.New("offline")
+	}
+	f.mu.Lock()
+	f.snaps++
+	down := f.snaps <= f.offline
+	f.mu.Unlock()
+	if down {
 		return light.State{}, errors.New("offline")
 	}
 	return light.State{Data: map[string]any{"id": f.info.ID}}, nil
@@ -211,5 +220,47 @@ func TestAddLight(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	if _, n := l.Last(); n == 0 || len(e.View().Lamps) != 1 {
 		t.Fatal("added light not driven")
+	}
+}
+
+func TestTimeContinuesAcrossRateChange(t *testing.T) {
+	e := started(t, light.NewVirtual(light.Info{ID: "a"}))
+	for _, blk := range kicks(3, 48000) {
+		e.Process(blk)
+	}
+	before := e.View().Features.Time
+	for _, blk := range kicks(1, 44100) {
+		e.Process(blk)
+	}
+	if after := e.View().Features.Time; after <= before {
+		t.Fatalf("time went back from %v to %v after a rate change", before, after)
+	}
+}
+
+func TestLampOnlineLaterIsSnapshottedBeforeDriving(t *testing.T) {
+	old := snapshotRetry
+	snapshotRetry = 50 * time.Millisecond
+	t.Cleanup(func() { snapshotRetry = old })
+	l := &fakeLight{info: light.Info{ID: "late", MaxFPS: 100}, offline: 3}
+	e := New(Options{Lights: []light.Light{l}})
+	e.Start(context.Background())
+	for _, blk := range kicks(0.1, 48000) {
+		e.Process(blk)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if n := l.count(); n != 0 {
+		t.Fatalf("lamp driven %d times before its state was saved", n)
+	}
+	time.Sleep(300 * time.Millisecond) // retries succeed on the 4th snapshot
+	for _, blk := range kicks(1, 48000) {
+		e.Process(blk)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if l.count() == 0 {
+		t.Fatal("lamp not driven after it came online")
+	}
+	e.Close(context.Background())
+	if len(l.restored) != 1 || l.restored[0].Data["id"] != "late" {
+		t.Fatalf("restore %+v", l.restored)
 	}
 }

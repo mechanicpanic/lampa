@@ -111,3 +111,12 @@ func TestAnalyzerSanitizesSamples(t *testing.T) {
 		checkFinite(t, f)
 	}
 }
+
+func TestLowSampleRatesDoNotPanic(t *testing.T) {
+	for _, r := range []int{8000, 16000, 22050, 24000} {
+		a := New(Config{SampleRate: r})
+		for _, f := range pushAll(a, sine(200, 0.5, 1, r), 512) {
+			checkFinite(t, f)
+		}
+	}
+}

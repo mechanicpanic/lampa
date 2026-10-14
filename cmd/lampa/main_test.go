@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"syscall"
 	"testing"
 
 	"lampa/internal/config"
@@ -52,5 +54,15 @@ func TestFindTap(t *testing.T) {
 	os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755)
 	if got := findTap(p); got != p {
 		t.Fatalf("explicit flag: %s", got)
+	}
+}
+
+func TestClosingTheTerminalRestoresLamps(t *testing.T) {
+	// Closing a herdr pane / Ghostty tab sends SIGHUP; it must go through
+	// the same shutdown (and lamp restore) as Ctrl-C.
+	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP} {
+		if !slices.Contains(shutdownSignals, sig) {
+			t.Fatalf("%v does not trigger shutdown", sig)
+		}
 	}
 }

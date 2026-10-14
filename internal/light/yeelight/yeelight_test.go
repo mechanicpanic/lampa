@@ -141,6 +141,12 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 }
 
 func newTestBulb(t *testing.T, f *fakeYee, music bool) *Bulb {
+	b := idleTestBulb(t, f, music)
+	b.Apply(context.Background(), light.Frame{}) // first frame starts streaming
+	return b
+}
+
+func idleTestBulb(t *testing.T, f *fakeYee, music bool) *Bulb {
 	b := newBulb(f.ln.Addr().String(), light.Info{ID: "y1"}, music, 10*time.Millisecond, 50*time.Millisecond)
 	t.Cleanup(func() { b.Close() })
 	return b
@@ -250,5 +256,21 @@ func TestSnapshotRestore(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 	if f.musicConnCount() != n {
 		t.Fatal("bulb re-entered music mode after Restore")
+	}
+}
+
+func TestNothingSentBeforeSnapshot(t *testing.T) {
+	f := newFakeYee(t, false)
+	b := idleTestBulb(t, f, true)
+	time.Sleep(100 * time.Millisecond) // the engine may snapshot a moment after creating lamps
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := b.Snapshot(ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.ctrl) == 0 || f.ctrl[0].Method != "get_prop" || len(f.musicConns) != 0 {
+		t.Fatalf("bulb was touched before its state was saved: %+v, music conns %d", f.ctrl, len(f.musicConns))
 	}
 }

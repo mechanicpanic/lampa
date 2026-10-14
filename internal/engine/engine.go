@@ -21,6 +21,9 @@ const (
 	maxLatency      = 200 * time.Millisecond
 )
 
+// snapshotRetry: how often a lamp that was unreachable at start is retried.
+var snapshotRetry = 3 * time.Second
+
 type Options struct {
 	Lights      []light.Light
 	Mode        int
@@ -57,6 +60,7 @@ type lamp struct {
 	state  light.State
 	color  color.RGB
 	bright float64
+	ready  bool // state saved; guarded by Engine.mu
 }
 
 type Engine struct {
@@ -71,6 +75,7 @@ type Engine struct {
 	an          *analysis.Analyzer
 	last        analysis.Features
 	lastTime    time.Duration
+	timeBase    time.Duration // keeps Features.Time monotonic across analyzer re-creation
 	history     []Marker
 	lastAudio   time.Time
 	runCtx      context.Context
@@ -95,12 +100,45 @@ func New(o Options) *Engine {
 	return e
 }
 
-func snapshot(ctx context.Context, lp *lamp) {
+func snapshot(ctx context.Context, lp *lamp) bool {
 	sctx, cancel := context.WithTimeout(ctx, snapshotTimeout)
 	defer cancel()
-	if s, err := lp.l.Snapshot(sctx); err == nil {
+	s, err := lp.l.Snapshot(sctx)
+	if err == nil {
 		lp.state = s
 	}
+	return err == nil
+}
+
+// activate lets the engine drive a lamp whose state is saved; an
+// unreachable lamp is retried in the background and driven only once its
+// state is known, so Close can always put it back.
+func (e *Engine) activate(lp *lamp, saved bool) {
+	if saved {
+		e.mu.Lock()
+		lp.ready = true
+		e.mu.Unlock()
+		return
+	}
+	e.wg.Add(1)
+	go func() {
+		defer e.wg.Done()
+		t := time.NewTicker(snapshotRetry)
+		defer t.Stop()
+		for {
+			select {
+			case <-e.runCtx.Done():
+				return
+			case <-t.C:
+				if snapshot(e.runCtx, lp) {
+					e.mu.Lock()
+					lp.ready = true
+					e.mu.Unlock()
+					return
+				}
+			}
+		}
+	}()
 }
 
 func (e *Engine) startRunner(lp *lamp) {
@@ -115,23 +153,26 @@ func (e *Engine) Start(ctx context.Context) {
 	e.mu.Lock()
 	lamps := append([]*lamp(nil), e.lamps...)
 	e.mu.Unlock()
+	saved := make([]bool, len(lamps))
 	var wg sync.WaitGroup
-	for _, lp := range lamps {
+	for i, lp := range lamps {
 		wg.Add(1)
-		go func() { defer wg.Done(); snapshot(ctx, lp) }()
+		go func() { defer wg.Done(); saved[i] = snapshot(ctx, lp) }()
 	}
 	wg.Wait()
-	for _, lp := range lamps {
+	for i, lp := range lamps {
+		e.activate(lp, saved[i])
 		e.startRunner(lp)
 	}
 }
 
 func (e *Engine) AddLight(l light.Light) {
 	lp := &lamp{l: l, r: light.NewRunner(l)}
-	snapshot(context.Background(), lp)
+	ok := snapshot(context.Background(), lp)
 	e.mu.Lock()
 	e.lamps = append(e.lamps, lp)
 	e.mu.Unlock()
+	e.activate(lp, ok)
 	e.startRunner(lp)
 }
 
@@ -166,10 +207,13 @@ func (e *Engine) Process(b audio.Block) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.an == nil || e.an.Rate() != b.Rate {
+		if e.an != nil { // device/rate change: modes keep running on one clock
+			e.timeBase = e.last.Time + 10*time.Millisecond
+		}
 		e.an = analysis.New(analysis.Config{SampleRate: b.Rate, Sensitivity: e.sensitivity, Latency: e.latency})
-		e.lastTime = 0
 	}
 	for _, f := range e.an.Push(b.Samples) {
+		f.Time += e.timeBase
 		e.step(f)
 	}
 }
@@ -195,7 +239,7 @@ func (e *Engine) step(f analysis.Features) {
 		lp.env.Attack, lp.env.Release = att, rel
 		lp.bright = lp.env.Step(scene[i].Brightness, dt)
 		lp.color = scene[i].Color.ToRGB()
-		if !e.paused {
+		if !e.paused && lp.ready {
 			r, g, b := lp.color.Bytes()
 			lp.r.Set(light.Frame{R: r, G: g, B: b, Brightness: lp.bright})
 		}

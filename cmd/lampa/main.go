@@ -25,6 +25,9 @@ import (
 	"lampa/internal/tui"
 )
 
+// shutdownSignals end the session cleanly: lamps are restored on all of them.
+var shutdownSignals = []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP}
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "discover" {
 		os.Exit(runDiscover(os.Args[2:]))
@@ -115,7 +118,7 @@ func run(args []string) int {
 		Sensitivity: cfg.Sensitivity,
 		Latency:     time.Duration(cfg.LatencyMS) * time.Millisecond,
 	})
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(context.Background(), shutdownSignals...)
 	defer cancel()
 	eng.Start(ctx)
 

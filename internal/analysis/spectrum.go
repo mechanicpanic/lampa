@@ -44,6 +44,9 @@ func NewSpectrum(rate int) *Spectrum {
 			k := int(math.Round(s.Centers[b] / s.binWidth()))
 			kLo, kHi = k, k+1
 		}
+		// Bands above Nyquist (low sample rates, e.g. a 16 kHz headset)
+		// stay empty and read as silence.
+		kLo, kHi = min(kLo, len(s.Mag)), min(kHi, len(s.Mag))
 		s.bandBins[b] = [2]int{kLo, kHi}
 	}
 	return s

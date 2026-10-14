@@ -109,9 +109,11 @@ func (a *Analyzer) process() Features {
 	a.spec.Compute(a.frame)
 	a.computeBands(&f)
 	k := 1 + (1 - a.cfg.Sensitivity)
-	f.OnsetLow, f.OnsetHigh, a.flux = a.onset.step(a.spec.Mag, f.Time, k)
-	f.BPM, f.BeatPhase, f.BarPhase, f.Confidence, f.Beat =
-		a.tempo.step(f.Time, a.flux, f.OnsetLow.Hit || f.OnsetHigh.Hit, a.cfg.Latency)
+	var fluxLow, fluxHigh float64
+	f.OnsetLow, f.OnsetHigh, fluxLow, fluxHigh = a.onset.step(a.spec.Mag, f.Time, k)
+	a.flux = fluxLow + fluxHigh
+	f.BPM, f.BeatPhase, f.BarPhase, f.Confidence, f.Beat = a.tempo.step(f.Time, a.flux, fluxLow,
+		f.OnsetLow.Hit || f.OnsetHigh.Hit, f.OnsetLow.Hit, a.cfg.Latency)
 	f.Build = a.build.step(toDB(a.totalPower), a.dt)
 	return f
 }
