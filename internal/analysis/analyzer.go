@@ -26,6 +26,8 @@ type Analyzer struct {
 	power    [NumBands]float64
 	bandNorm [NumBands]Normalizer
 	loudNorm Normalizer
+	onset    *onsetDetector
+	flux     float64       // combined novelty of the last frame
 	groupOf  [NumBands]int // 0 sub, 1 bass, 2 lowmid, 3 mid, 4 high
 	groupN   [5]int
 }
@@ -43,6 +45,7 @@ func New(cfg Config) *Analyzer {
 		dt:    time.Duration(float64(HopSize) / float64(cfg.SampleRate) * float64(time.Second)),
 		frame: make([]float64, WindowSize),
 	}
+	a.onset = newOnsetDetector(a.spec, cfg.SampleRate)
 	for b, c := range a.spec.Centers {
 		g := 4
 		switch {
@@ -101,6 +104,8 @@ func (a *Analyzer) process() Features {
 	f := Features{Time: a.now()}
 	a.spec.Compute(a.frame)
 	a.computeBands(&f)
+	k := 1 + (1 - a.cfg.Sensitivity)
+	f.OnsetLow, f.OnsetHigh, a.flux = a.onset.step(a.spec.Mag, f.Time, k)
 	return f
 }
 
