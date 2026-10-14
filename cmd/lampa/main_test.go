@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"lampa/internal/config"
+	"lampa/internal/engine"
 	"lampa/internal/light"
 )
 
@@ -18,8 +20,12 @@ func TestBuildLightsDryUsesConfigNames(t *testing.T) {
 		{Kind: "yeelight", IP: "10.0.0.6", ID: "b", Name: "w3", Disabled: true},
 	}
 	ls := buildLights(cfg, true)
-	if len(ls) != 1 || ls[0].Info().Name != "left" || ls[0].Info().Kind != light.KindVirtual || ls[0].Info().Role != "bass" {
+	// disabled lamps are built too: the TUI lists them so they can be switched back on
+	if len(ls) != 2 || ls[0].Info().Name != "left" || ls[0].Info().Kind != light.KindVirtual || ls[0].Info().Role != "bass" {
 		t.Fatalf("%+v", ls)
+	}
+	if d := disabledIDs(cfg); len(d) != 1 || d[0] != "b" {
+		t.Fatalf("disabled ids %v", d)
 	}
 }
 
@@ -64,5 +70,33 @@ func TestClosingTheTerminalRestoresLamps(t *testing.T) {
 		if !slices.Contains(shutdownSignals, sig) {
 			t.Fatalf("%v does not trigger shutdown", sig)
 		}
+	}
+}
+
+func TestSetLampEnabledPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.toml")
+	cfg := config.Default()
+	cfg.Lamps = []config.Lamp{{Kind: "wiz", ID: "a", Name: "hero"}, {Kind: "wiz", ID: "b", Name: "top"}}
+	eng := engine.New(engine.Options{Lights: buildLights(cfg, true)})
+	eng.Start(context.Background())
+	defer eng.Close(context.Background())
+	c := &controller{Engine: eng, cfgPath: path, cfg: cfg}
+
+	c.SetLampEnabled("b", false)
+	saved, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Lamps[0].Disabled || !saved.Lamps[1].Disabled {
+		t.Fatalf("saved %+v", saved.Lamps)
+	}
+	for _, l := range eng.View().Lamps {
+		if l.Info.ID == "b" && l.Enabled {
+			t.Fatal("engine still drives b")
+		}
+	}
+	c.SetLampEnabled("b", true)
+	if saved, _ = config.Load(path); saved.Lamps[1].Disabled {
+		t.Fatal("re-enable not saved")
 	}
 }

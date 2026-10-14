@@ -23,6 +23,7 @@ type Controller interface {
 	SetSource(app *audio.App)
 	SourceName() string
 	Discover(ctx context.Context) (added int, err error)
+	SetLampEnabled(id string, on bool)
 }
 
 type tickMsg time.Time
@@ -38,13 +39,15 @@ type discoveredMsg struct {
 }
 
 type Model struct {
-	c       Controller
-	v       engine.View
-	width   int
-	picking bool
-	apps    []audio.App
-	cursor  int
-	status  string
+	c          Controller
+	v          engine.View
+	width      int
+	picking    bool
+	apps       []audio.App
+	cursor     int
+	lamps      bool // lamp picker open
+	lampCursor int
+	status     string
 }
 
 func New(c Controller) Model {
@@ -79,6 +82,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.picking {
 			return m.updatePicker(msg)
+		}
+		if m.lamps {
+			return m.updateLampPicker(msg)
 		}
 		return m.updateKeys(msg)
 	}
@@ -123,6 +129,8 @@ func (m Model) updateKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.c.AdjustLatency(-10 * time.Millisecond)
 	case " ":
 		m.c.TogglePause()
+	case "l":
+		m.lamps, m.lampCursor = true, 0
 	case "s":
 		c := m.c
 		return m, func() tea.Msg {
@@ -140,6 +148,26 @@ func (m Model) updateKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			n, err := c.Discover(ctx)
 			return discoveredMsg{n, err}
 		}
+	}
+	return m, nil
+}
+
+func (m Model) updateLampPicker(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	n := len(m.v.Lamps)
+	switch k.String() {
+	case "up", "k":
+		m.lampCursor = max(0, m.lampCursor-1)
+	case "down", "j":
+		m.lampCursor = min(max(0, n-1), m.lampCursor+1)
+	case " ", "enter":
+		if m.lampCursor < n {
+			l := m.v.Lamps[m.lampCursor]
+			c := m.c
+			// switching talks to the lamp (restore / snapshot), so off the UI thread
+			return m, func() tea.Msg { c.SetLampEnabled(l.Info.ID, !l.Enabled); return nil }
+		}
+	case "esc", "q", "l":
+		m.lamps = false
 	}
 	return m, nil
 }

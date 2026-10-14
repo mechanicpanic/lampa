@@ -42,9 +42,6 @@ func info(l config.Lamp) light.Info {
 func buildLights(cfg config.Config, dry bool) []light.Light {
 	var out []light.Light
 	for _, l := range cfg.Lamps {
-		if l.Disabled {
-			continue
-		}
 		if dry {
 			i := info(l)
 			i.Kind = light.KindVirtual
@@ -71,6 +68,18 @@ func buildLights(cfg config.Config, dry bool) []light.Light {
 		}
 	}
 	return out
+}
+
+// disabledIDs lists lamps the user switched off; the engine keeps them
+// listed but never touches them.
+func disabledIDs(cfg config.Config) []string {
+	var ids []string
+	for _, l := range cfg.Lamps {
+		if l.Disabled {
+			ids = append(ids, l.ID)
+		}
+	}
+	return ids
 }
 
 func findTap(flagPath string) string {
@@ -113,6 +122,7 @@ func run(args []string) int {
 	}
 	eng := engine.New(engine.Options{
 		Lights:      buildLights(cfg, *dry),
+		Disabled:    disabledIDs(cfg),
 		Mode:        modes.Index(cfg.Mode),
 		Palette:     paletteIndex(cfg.Palette),
 		Sensitivity: cfg.Sensitivity,

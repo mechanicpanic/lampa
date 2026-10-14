@@ -264,3 +264,89 @@ func TestLampOnlineLaterIsSnapshottedBeforeDriving(t *testing.T) {
 		t.Fatalf("restore %+v", l.restored)
 	}
 }
+
+func (f *fakeLight) snapCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.snaps
+}
+
+func (f *fakeLight) restoreCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.restored)
+}
+
+func lampEnabled(v View, id string) bool {
+	for _, l := range v.Lamps {
+		if l.Info.ID == id {
+			return l.Enabled
+		}
+	}
+	panic("no lamp " + id)
+}
+
+func TestDisabledAtStartIsUntouched(t *testing.T) {
+	a := &fakeLight{info: light.Info{ID: "a", MaxFPS: 100}}
+	b := &fakeLight{info: light.Info{ID: "b", MaxFPS: 100}}
+	e := New(Options{Lights: []light.Light{a, b}, Disabled: []string{"b"}})
+	e.Start(context.Background())
+	for _, blk := range kicks(1, 48000) {
+		e.Process(blk)
+	}
+	time.Sleep(30 * time.Millisecond)
+	v := e.View()
+	if !lampEnabled(v, "a") || lampEnabled(v, "b") {
+		t.Fatalf("enabled flags wrong: %+v", v.Lamps)
+	}
+	if b.snapCount() != 0 || b.count() != 0 {
+		t.Fatalf("disabled lamp touched: %d snapshots, %d frames", b.snapCount(), b.count())
+	}
+	if a.count() == 0 {
+		t.Fatal("enabled lamp not driven")
+	}
+	e.Close(context.Background())
+	if b.restoreCount() != 0 {
+		t.Fatal("never-touched lamp was restored on Close")
+	}
+}
+
+func TestDisableRestoresThenReenableResumes(t *testing.T) {
+	a := &fakeLight{info: light.Info{ID: "a", MaxFPS: 100}}
+	b := &fakeLight{info: light.Info{ID: "b", MaxFPS: 100}}
+	e := New(Options{Lights: []light.Light{a, b}})
+	e.Start(context.Background())
+	t.Cleanup(func() { e.Close(context.Background()) })
+	for _, blk := range kicks(1, 48000) {
+		e.Process(blk)
+	}
+	time.Sleep(30 * time.Millisecond)
+
+	e.SetEnabled("b", false)
+	if b.restoreCount() != 1 || b.restored[0].Data["id"] != "b" {
+		t.Fatalf("disable did not restore b: %+v", b.restored)
+	}
+	n := b.count()
+	for _, blk := range kicks(1, 48000) {
+		e.Process(blk)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if b.count() != n {
+		t.Fatalf("disabled lamp still driven (%d → %d)", n, b.count())
+	}
+	if lampEnabled(e.View(), "b") {
+		t.Fatal("view still shows b enabled")
+	}
+
+	e.SetEnabled("b", true)
+	if b.snapCount() != 2 {
+		t.Fatalf("re-enable must take a fresh snapshot, got %d snapshots", b.snapCount())
+	}
+	for _, blk := range kicks(1, 48000) {
+		e.Process(blk)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if b.count() == n {
+		t.Fatal("re-enabled lamp not driven")
+	}
+}

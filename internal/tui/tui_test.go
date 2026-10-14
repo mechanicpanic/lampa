@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +44,9 @@ func (f *fakeCtl) Sources(context.Context) ([]audio.App, error) {
 }
 func (f *fakeCtl) SetSource(a *audio.App) { f.source = a; f.calls = append(f.calls, "source") }
 func (f *fakeCtl) SourceName() string     { return "вся система" }
+func (f *fakeCtl) SetLampEnabled(id string, on bool) {
+	f.calls = append(f.calls, fmt.Sprintf("lamp %s %v", id, on))
+}
 func (f *fakeCtl) Discover(context.Context) (int, error) {
 	f.calls = append(f.calls, "discover")
 	return 2, nil
@@ -137,5 +141,33 @@ func TestSpectrumRows(t *testing.T) {
 	}
 	if top[2] != ' ' || bottom[2] != '█' {
 		t.Fatalf("half band: %q %q", rows[0], rows[1])
+	}
+}
+
+func TestLampPicker(t *testing.T) {
+	c := &fakeCtl{view: engine.View{Lamps: []engine.LampView{
+		{Info: light.Info{ID: "a", Name: "hero"}, Enabled: true},
+		{Info: light.Info{ID: "b", Name: "потолок"}, Enabled: false},
+	}}}
+	m := tea.Model(New(c))
+	m, _ = press(m, tickMsg(time.Now()))
+	if !strings.Contains(m.View(), "выключена") {
+		t.Fatalf("disabled lamp tile not marked:\n%s", m.View())
+	}
+	m, _ = press(m, runes("l"))
+	if out := m.View(); !strings.Contains(out, "Лампы") || !strings.Contains(out, "hero") || !strings.Contains(out, "потолок") {
+		t.Fatalf("lamp picker not shown:\n%s", out)
+	}
+	m, cmd := press(m, tea.KeyMsg{Type: tea.KeyDown}, tea.KeyMsg{Type: tea.KeySpace})
+	if cmd == nil {
+		t.Fatal("space returned no command")
+	}
+	cmd()
+	if last := c.calls[len(c.calls)-1]; last != "lamp b true" {
+		t.Fatalf("calls %v", c.calls)
+	}
+	m, _ = press(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if strings.Contains(m.View(), "Лампы") {
+		t.Fatal("picker still open after esc")
 	}
 }

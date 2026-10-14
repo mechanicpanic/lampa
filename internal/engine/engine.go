@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -30,10 +31,12 @@ type Options struct {
 	Palette     int
 	Sensitivity float64
 	Latency     time.Duration
+	Disabled    []string // lamp IDs the user switched off: never touched
 }
 
 type LampView struct {
 	Info       light.Info
+	Enabled    bool
 	Stats      light.Stats
 	Color      color.RGB
 	Brightness float64
@@ -54,13 +57,14 @@ type View struct {
 }
 
 type lamp struct {
-	l      light.Light
-	r      *light.Runner
-	env    color.Envelope
-	state  light.State
-	color  color.RGB
-	bright float64
-	ready  bool // state saved; guarded by Engine.mu
+	l       light.Light
+	r       *light.Runner
+	env     color.Envelope
+	state   light.State
+	color   color.RGB
+	bright  float64
+	ready   bool // state saved; guarded by Engine.mu
+	enabled bool // user wants this lamp driven; guarded by Engine.mu
 }
 
 type Engine struct {
@@ -94,7 +98,7 @@ func New(o Options) *Engine {
 	}
 	e.palette = o.Palette % len(color.Palettes)
 	for _, l := range o.Lights {
-		e.lamps = append(e.lamps, &lamp{l: l, r: light.NewRunner(l)})
+		e.lamps = append(e.lamps, &lamp{l: l, r: light.NewRunner(l), enabled: !slices.Contains(o.Disabled, l.Info().ID)})
 	}
 	e.runCtx, e.cancelRuns = context.WithCancel(context.Background())
 	return e
@@ -116,7 +120,7 @@ func snapshot(ctx context.Context, lp *lamp) bool {
 func (e *Engine) activate(lp *lamp, saved bool) {
 	if saved {
 		e.mu.Lock()
-		lp.ready = true
+		lp.ready = lp.enabled
 		e.mu.Unlock()
 		return
 	}
@@ -132,7 +136,7 @@ func (e *Engine) activate(lp *lamp, saved bool) {
 			case <-t.C:
 				if snapshot(e.runCtx, lp) {
 					e.mu.Lock()
-					lp.ready = true
+					lp.ready = lp.enabled
 					e.mu.Unlock()
 					return
 				}
@@ -154,20 +158,31 @@ func (e *Engine) Start(ctx context.Context) {
 	lamps := append([]*lamp(nil), e.lamps...)
 	e.mu.Unlock()
 	saved := make([]bool, len(lamps))
+	enabled := make([]bool, len(lamps))
+	e.mu.Lock()
+	for i, lp := range lamps {
+		enabled[i] = lp.enabled
+	}
+	e.mu.Unlock()
 	var wg sync.WaitGroup
 	for i, lp := range lamps {
+		if !enabled[i] {
+			continue // switched off by the user: don't even read it
+		}
 		wg.Add(1)
 		go func() { defer wg.Done(); saved[i] = snapshot(ctx, lp) }()
 	}
 	wg.Wait()
 	for i, lp := range lamps {
-		e.activate(lp, saved[i])
+		if enabled[i] {
+			e.activate(lp, saved[i])
+		}
 		e.startRunner(lp)
 	}
 }
 
 func (e *Engine) AddLight(l light.Light) {
-	lp := &lamp{l: l, r: light.NewRunner(l)}
+	lp := &lamp{l: l, r: light.NewRunner(l), enabled: true}
 	ok := snapshot(context.Background(), lp)
 	e.mu.Lock()
 	e.lamps = append(e.lamps, lp)
@@ -221,9 +236,13 @@ func (e *Engine) Process(b audio.Block) {
 // step must be called with e.mu held.
 func (e *Engine) step(f analysis.Features) {
 	m := e.modes[e.mode]
-	infos := make([]light.Info, len(e.lamps))
-	for i, lp := range e.lamps {
-		infos[i] = lp.l.Info()
+	var active []*lamp // modes lay out only the lamps in use
+	var infos []light.Info
+	for _, lp := range e.lamps {
+		if lp.enabled {
+			active = append(active, lp)
+			infos = append(infos, lp.l.Info())
+		}
 	}
 	scene := m.Update(f, modes.Context{Palette: color.Palettes[e.palette], Lights: infos})
 	att, rel := m.Envelope()
@@ -232,7 +251,7 @@ func (e *Engine) step(f analysis.Features) {
 		dt = 10 * time.Millisecond
 	}
 	e.lastTime = f.Time
-	for i, lp := range e.lamps {
+	for i, lp := range active {
 		if i >= len(scene) {
 			break
 		}
@@ -265,7 +284,7 @@ func (e *Engine) View() View {
 		History:     append([]Marker(nil), e.history...),
 	}
 	for _, lp := range e.lamps {
-		v.Lamps = append(v.Lamps, LampView{Info: lp.l.Info(), Stats: lp.r.Stats(), Color: lp.color, Brightness: lp.bright})
+		v.Lamps = append(v.Lamps, LampView{Info: lp.l.Info(), Enabled: lp.enabled, Stats: lp.r.Stats(), Color: lp.color, Brightness: lp.bright})
 	}
 	return v
 }
@@ -314,6 +333,10 @@ func (e *Engine) Close(ctx context.Context) {
 	e.wg.Wait()
 	e.mu.Lock()
 	lamps := append([]*lamp(nil), e.lamps...)
+	on := map[*lamp]bool{}
+	for _, lp := range lamps {
+		on[lp] = lp.enabled
+	}
 	e.mu.Unlock()
 	var wg sync.WaitGroup
 	for _, lp := range lamps {
@@ -322,9 +345,41 @@ func (e *Engine) Close(ctx context.Context) {
 			defer wg.Done()
 			rctx, cancel := context.WithTimeout(ctx, restoreTimeout)
 			defer cancel()
-			lp.l.Restore(rctx, lp.state)
+			if on[lp] { // disabled lamps were restored when switched off, or never touched
+				lp.l.Restore(rctx, lp.state)
+			}
 			lp.l.Close()
 		}()
 	}
 	wg.Wait()
+}
+
+// SetEnabled switches a lamp on or off at runtime. Off: stop driving it and
+// put it back as it was. On: save its current state, then drive it again.
+// It blocks for up to a few seconds (network), so call it off the UI thread.
+func (e *Engine) SetEnabled(id string, on bool) {
+	e.mu.Lock()
+	var lp *lamp
+	for _, l := range e.lamps {
+		if l.l.Info().ID == id {
+			lp = l
+		}
+	}
+	if lp == nil || lp.enabled == on {
+		e.mu.Unlock()
+		return
+	}
+	lp.enabled = on
+	lp.ready = false
+	e.mu.Unlock()
+	if !on {
+		lp.r.Suspend()
+		ctx, cancel := context.WithTimeout(e.runCtx, restoreTimeout)
+		defer cancel()
+		lp.l.Restore(ctx, lp.state)
+		return
+	}
+	ok := snapshot(e.runCtx, lp)
+	lp.r.Resume()
+	e.activate(lp, ok)
 }

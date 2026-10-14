@@ -38,9 +38,10 @@ type Bulb struct {
 	backoffMin time.Duration
 	backoffMax time.Duration
 	nextID     atomic.Int64
-	done       chan struct{}
-	stopOnce   sync.Once
-	startOnce  sync.Once
+	// one streaming session: started by Apply, ended by Restore/Close
+	done    chan struct{} // guarded by mu; closed when the session ends
+	running bool          // guarded by mu
+	closed  bool          // guarded by mu; Close is final
 
 	mu     sync.Mutex
 	stream net.Conn
@@ -60,7 +61,7 @@ func newBulb(addr string, info light.Info, music bool, bmin, bmax time.Duration)
 		info.MaxFPS = musicFPS
 	}
 	b := &Bulb{info: info, addr: addr, music: music, backoffMin: bmin, backoffMax: bmax,
-		done: make(chan struct{}), status: light.StatusConnecting}
+		status: light.StatusConnecting}
 	return b
 }
 
@@ -83,24 +84,24 @@ func (b *Bulb) cmd(method string, params ...any) []byte {
 	return append(msg, '\r', '\n')
 }
 
-func (b *Bulb) stopped() bool {
+func isDone(done chan struct{}) bool {
 	select {
-	case <-b.done:
+	case <-done:
 		return true
 	default:
 		return false
 	}
 }
 
-func (b *Bulb) loop() {
+func (b *Bulb) loop(done chan struct{}) {
 	backoff := b.backoffMin
-	for !b.stopped() {
+	for !isDone(done) {
 		b.setStatus(light.StatusConnecting, "")
 		conn, err := b.connect()
 		if err != nil {
 			b.setStatus(light.StatusLost, err.Error())
 			select {
-			case <-b.done:
+			case <-done:
 				return
 			case <-time.After(backoff):
 			}
@@ -113,7 +114,7 @@ func (b *Bulb) loop() {
 			note = "без music mode: ≈0,5 кадра/с"
 		}
 		b.mu.Lock()
-		if b.stopped() { // shutdown raced with connect
+		if isDone(done) { // shutdown raced with connect
 			b.mu.Unlock()
 			conn.Close()
 			return
@@ -176,12 +177,11 @@ func (b *Bulb) connect() (net.Conn, error) {
 // Apply starts streaming on first use, so Snapshot (taken before the first
 // frame) sees the bulb as the user left it, not after our set_power on.
 func (b *Bulb) Apply(_ context.Context, f light.Frame) error {
-	b.startOnce.Do(func() {
-		if !b.stopped() {
-			go b.loop()
-		}
-	})
 	b.mu.Lock()
+	if !b.running && !b.closed {
+		b.running, b.done = true, make(chan struct{})
+		go b.loop(b.done)
+	}
 	conn := b.stream
 	b.mu.Unlock()
 	if conn == nil {
@@ -295,11 +295,16 @@ func (b *Bulb) Restore(ctx context.Context, s light.State) error {
 	return nil
 }
 
-// shutdown stops the connect loop without waiting for an in-flight dial
-// (an offline bulb must not delay exit); loop() re-checks stopped() under mu.
+// shutdown ends the streaming session without waiting for an in-flight dial
+// (an offline bulb must not delay exit); loop() re-checks done under mu.
+// The next Apply starts a new session.
 func (b *Bulb) shutdown() {
-	b.stopOnce.Do(func() { close(b.done) })
 	b.mu.Lock()
+	if b.running {
+		close(b.done)
+		b.running = false
+	}
+	b.status, b.note = light.StatusConnecting, ""
 	if b.stream != nil {
 		b.stream.Close()
 		b.stream = nil
@@ -308,6 +313,9 @@ func (b *Bulb) shutdown() {
 }
 
 func (b *Bulb) Close() error {
+	b.mu.Lock()
+	b.closed = true
+	b.mu.Unlock()
 	b.shutdown()
 	return nil
 }

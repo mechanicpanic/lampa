@@ -19,17 +19,19 @@ type Stats struct {
 // Runner owns one lamp: it keeps only the newest frame, rate-limits to
 // Info().MaxFPS and skips frames identical to the last one sent.
 type Runner struct {
-	l    Light
-	wake chan struct{}
+	l       Light
+	wake    chan struct{}
+	applyMu sync.Mutex // held for the duration of an Apply
 
-	mu      sync.Mutex
-	pending Frame
-	has     bool
-	last    Frame
-	sentAny bool
-	failed  bool
-	errors  int
-	sends   []time.Time
+	mu        sync.Mutex
+	pending   Frame
+	has       bool
+	last      Frame
+	sentAny   bool
+	failed    bool
+	errors    int
+	sends     []time.Time
+	suspended bool
 }
 
 func NewRunner(l Light) *Runner {
@@ -71,7 +73,10 @@ func (r *Runner) Run(ctx context.Context) {
 		r.mu.Lock()
 		f, has := r.pending, r.has
 		r.has = false
-		skip := !has || (r.sentAny && !r.failed && f == r.last)
+		skip := !has || r.suspended || (r.sentAny && !r.failed && f == r.last)
+		if !skip {
+			r.applyMu.Lock() // taken under mu so Suspend can't slip in between
+		}
 		r.mu.Unlock()
 		if skip {
 			continue
@@ -79,6 +84,7 @@ func (r *Runner) Run(ctx context.Context) {
 		actx, cancel := context.WithTimeout(ctx, time.Second)
 		err := r.l.Apply(actx, f)
 		cancel()
+		r.applyMu.Unlock()
 		lastSend = time.Now()
 		r.mu.Lock()
 		if err != nil {
@@ -109,4 +115,23 @@ func (r *Runner) Stats() Stats {
 		s.Status, s.Note = st.Status()
 	}
 	return s
+}
+
+// Suspend stops sending: the pending frame is dropped and Suspend returns
+// only after an in-flight Apply has finished, so a Restore issued right
+// after it cannot be overwritten by a late frame.
+func (r *Runner) Suspend() {
+	r.mu.Lock()
+	r.suspended, r.has = true, false
+	r.sentAny = false // after Resume the first frame is always sent
+	r.mu.Unlock()
+	r.applyMu.Lock()
+	r.applyMu.Unlock()
+}
+
+// Resume undoes Suspend.
+func (r *Runner) Resume() {
+	r.mu.Lock()
+	r.suspended = false
+	r.mu.Unlock()
 }

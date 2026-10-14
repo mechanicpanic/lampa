@@ -91,3 +91,16 @@ func (c *controller) stop() {
 		c.srcCancel()
 	}
 }
+
+// SetLampEnabled switches a lamp on/off and remembers the choice.
+func (c *controller) SetLampEnabled(id string, on bool) {
+	c.SetEnabled(id, on)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.cfg.Lamps {
+		if c.cfg.Lamps[i].ID == id {
+			c.cfg.Lamps[i].Disabled = !on
+		}
+	}
+	config.Save(c.cfgPath, c.cfg)
+}

@@ -41,6 +41,9 @@ func (m Model) View() string {
 	if m.picking {
 		return frameStyle.Render(m.pickerView())
 	}
+	if m.lamps {
+		return frameStyle.Render(m.lampPickerView())
+	}
 	v := m.v
 	inner := max(40, m.width-4)
 	var b strings.Builder
@@ -97,7 +100,7 @@ func (m Model) View() string {
 	if m.status != "" {
 		b.WriteString("\n" + m.status)
 	}
-	b.WriteString("\n" + dim.Render("[1-5] режим  [p] палитра  [←→] чувств.  [↑↓] задержка  [s] источник  [d] поиск  [space] пауза  [q] выход"))
+	b.WriteString("\n" + dim.Render("[1-5] режим  [p] палитра  [←→] чувств.  [↑↓] задержка  [s] источник  [l] лампы  [d] поиск  [space] пауза  [q] выход"))
 	return frameStyle.Render(b.String())
 }
 
@@ -137,10 +140,13 @@ func tile(l engine.LampView) string {
 	hex := fmt.Sprintf("#%02x%02x%02x", uint8(c.R*k*255), uint8(c.G*k*255), uint8(c.B*k*255))
 	swatch := lipgloss.NewStyle().Background(lipgloss.Color(hex)).Width(14).Height(2).Render("")
 	status := ok.Render(fmt.Sprintf("%2.0f fps ✓", l.Stats.FPS))
-	switch l.Stats.Status {
-	case light.StatusLost:
+	switch {
+	case !l.Enabled:
+		status = dim.Render("выключена")
+		swatch = lipgloss.NewStyle().Background(lipgloss.Color("#262626")).Width(14).Height(2).Render("")
+	case l.Stats.Status == light.StatusLost:
 		status = warn.Render("потеряна")
-	case light.StatusConnecting:
+	case l.Stats.Status == light.StatusConnecting:
 		status = dim.Render("подключаюсь…")
 	}
 	lines := []string{swatch, l.Info.Name, status}
@@ -165,5 +171,26 @@ func (m Model) pickerView() string {
 		b.WriteString(cursor + it + "\n")
 	}
 	b.WriteString("\n" + dim.Render("[↑↓] выбрать  [enter] ок  [esc] отмена"))
+	return b.String()
+}
+
+func (m Model) lampPickerView() string {
+	var b strings.Builder
+	b.WriteString(accent.Render("Лампы") + "\n\n")
+	for i, l := range m.v.Lamps {
+		cursor := "  "
+		if i == m.lampCursor {
+			cursor = accent.Render("▸ ")
+		}
+		mark := ok.Render("●")
+		if !l.Enabled {
+			mark = dim.Render("○")
+		}
+		b.WriteString(fmt.Sprintf("%s%s %-14s %s\n", cursor, mark, l.Info.Name, dim.Render(l.Info.Model)))
+	}
+	if len(m.v.Lamps) == 0 {
+		b.WriteString(dim.Render("ламп нет — закрой и нажми d") + "\n")
+	}
+	b.WriteString("\n" + dim.Render("[↑↓] выбрать  [space] вкл/выкл  [esc] закрыть"))
 	return b.String()
 }

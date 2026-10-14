@@ -147,3 +147,27 @@ func TestVirtual(t *testing.T) {
 		t.Fatalf("%+v %d", f, n)
 	}
 }
+
+func TestSuspendDropsPendingAndWaitsForInFlight(t *testing.T) {
+	l := &fakeLight{info: Info{MaxFPS: 100}, delay: 50 * time.Millisecond}
+	r := NewRunner(l)
+	run(t, r)
+	r.Set(Frame{R: 1, Brightness: 1})
+	time.Sleep(10 * time.Millisecond) // frame 1 is now being applied
+	r.Set(Frame{R: 2, Brightness: 1}) // pending
+	r.Suspend()
+	if got := l.frames(); len(got) != 1 || got[0].R != 1 {
+		t.Fatalf("after Suspend: %v (in-flight frame must have finished, pending dropped)", got)
+	}
+	r.Set(Frame{R: 3, Brightness: 1})
+	time.Sleep(80 * time.Millisecond)
+	if n := len(l.frames()); n != 1 {
+		t.Fatalf("suspended runner applied %d frames", n)
+	}
+	r.Resume()
+	r.Set(Frame{R: 4, Brightness: 1})
+	time.Sleep(80 * time.Millisecond)
+	if got := l.frames(); got[len(got)-1].R != 4 {
+		t.Fatalf("after Resume: %v", got)
+	}
+}

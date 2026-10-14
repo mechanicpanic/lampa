@@ -274,3 +274,24 @@ func TestNothingSentBeforeSnapshot(t *testing.T) {
 		t.Fatalf("bulb was touched before its state was saved: %+v, music conns %d", f.ctrl, len(f.musicConns))
 	}
 }
+
+func TestStreamsAgainAfterRestore(t *testing.T) {
+	f := newFakeYee(t, false)
+	b := newTestBulb(t, f, true)
+	waitFor(t, "first connection", isOK(b))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s, _ := b.Snapshot(ctx)
+	if err := b.Restore(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	// lamp switched back on in the TUI: the next frame reconnects
+	b.Apply(context.Background(), light.Frame{G: 255, Brightness: 1})
+	waitFor(t, "second music connection", func() bool { return f.musicConnCount() == 2 })
+	waitFor(t, "ok again", isOK(b))
+	b.Apply(context.Background(), light.Frame{G: 255, Brightness: 1})
+	waitFor(t, "green after re-enable", func() bool {
+		c, ok := f.find(true, "set_rgb")
+		return ok && c.Params[0] == float64(255<<8)
+	})
+}
