@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 
 	"lampa/internal/analysis"
 	"lampa/internal/audio"
@@ -67,6 +68,9 @@ type Model struct {
 }
 
 func New(c Controller) Model {
+	if zone.DefaultManager == nil {
+		zone.NewGlobal() // clickable cards
+	}
 	return Model{c: c, v: c.View(), width: 80, height: 24, fps: map[string]float64{}, hideSleeping: c.HideSleeping()}
 }
 
@@ -97,6 +101,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.status = fmt.Sprintf(i18n.T("new lamps found: %d"), msg.added)
 		}
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && !m.picking && !m.lamps {
+			return m, m.clickCmd(msg)
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if m.picking {
 			return m.updatePicker(msg)
@@ -261,4 +270,39 @@ func (m *Model) advanceRibbon() {
 	if len(m.ribbon) > ribbonMax {
 		m.ribbon = append(m.ribbon[:0], m.ribbon[len(m.ribbon)-ribbonMax:]...)
 	}
+}
+
+// clickCmd: a click on a lamp card (or a floor bar) switches that lamp; a
+// click on a group's name switches the whole group (all off if any is on).
+func (m Model) clickCmd(msg tea.MouseMsg) tea.Cmd {
+	c := m.c
+	groups := map[string][]engine.LampView{}
+	for _, l := range m.v.Lamps {
+		if zone.Get("lamp:" + l.Info.ID).InBounds(msg) {
+			return func() tea.Msg { c.SetLampEnabled(l.Info.ID, !l.Enabled); return nil }
+		}
+		if l.Info.Group != "" {
+			groups[l.Info.Group] = append(groups[l.Info.Group], l)
+		}
+	}
+	for name, members := range groups {
+		if !zone.Get("group:" + name).InBounds(msg) {
+			continue
+		}
+		on := true
+		for _, l := range members {
+			if l.Enabled {
+				on = false
+			}
+		}
+		return func() tea.Msg {
+			for _, l := range members {
+				if l.Enabled != on {
+					c.SetLampEnabled(l.Info.ID, on)
+				}
+			}
+			return nil
+		}
+	}
+	return nil
 }

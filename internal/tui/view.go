@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	zone "github.com/lrstanley/bubblezone"
 
 	"lampa/internal/color"
 	"lampa/internal/engine"
@@ -84,10 +85,10 @@ func (m Model) View() string {
 	if len(body) > h-2 {
 		body = body[:h-2]
 	}
-	return lipgloss.NewStyle().
+	return zone.Scan(lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).BorderForeground(border).
 		Padding(0, 1).Width(w - 2).Height(h - 2).
-		Render(strings.Join(body, "\n"))
+		Render(strings.Join(body, "\n")))
 }
 
 func (m Model) mainView(inner, height int) []string {
@@ -224,9 +225,9 @@ func (m Model) chips(inner int) []string {
 	for _, it := range m.items() {
 		var chip string
 		if it.group != "" {
-			chip = groupChip(it)
+			chip = zone.Mark("group:"+it.group, groupChip(it))
 		} else {
-			chip = lampChip(*it.single)
+			chip = zone.Mark("lamp:"+it.single.Info.ID, lampChip(*it.single))
 		}
 		if cur != "" && lipgloss.Width(cur)+3+lipgloss.Width(chip) > inner {
 			lines = append(lines, cur)
@@ -374,8 +375,8 @@ func tile(l engine.LampView, fps float64, width int) string {
 	if l.Stats.Note != "" && l.Enabled {
 		lines = append(lines, ansi.Truncate(dim.Render(i18n.T(l.Stats.Note)), cw, "…"))
 	}
-	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(frame).
-		Width(cw).Render(strings.Join(lines, "\n"))
+	return zone.Mark("lamp:"+l.Info.ID, lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(frame).
+		Width(cw).Render(strings.Join(lines, "\n")))
 }
 
 // bottom: the settings as pills (key + current value), an optional line of
@@ -532,27 +533,43 @@ func heartLevel(phase float64) int {
 	return 0
 }
 
-// groupTile: one card for a stacked fixture — a bar per floor, top first.
+// groupTile: one card for a stacked fixture, as tall as a lamp card — a bar
+// per floor (top first) on the left, the group name and status beside them.
+// Each bar is clickable (that lamp), the name too (the whole group).
 func (m Model) groupTile(it lampItem, width int) string {
 	cw := width - 2
-	var lines []string
+	barW := max(4, cw/2)
+	textW := max(1, cw-barW-1)
 	fps := math.Inf(1)
+	var bars []string
 	for _, l := range it.members {
 		fill := lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color.Hex()))
-		full := int(math.Round(l.Brightness * float64(cw)))
-		bar := fill.Render(strings.Repeat("█", full)) + fill.Faint(true).Render(strings.Repeat("░", cw-full))
+		full := int(math.Round(l.Brightness * float64(barW)))
+		bar := fill.Render(strings.Repeat("█", full)) + fill.Faint(true).Render(strings.Repeat("░", barW-full))
 		if !l.Enabled {
-			bar = dim.Render(strings.Repeat("░", cw))
+			bar = dim.Render(strings.Repeat("░", barW))
 		} else {
 			fps = math.Min(fps, m.shownFPS(l))
 		}
-		lines = append(lines, bar)
+		bars = append(bars, zone.Mark("lamp:"+l.Info.ID, bar))
 	}
 	status := groupMark(it)
 	if !math.IsInf(fps, 1) && status == ok.Render("♪") {
 		status = ok.Render(fmt.Sprintf("♪ %.0f fps", fps))
 	}
-	lines = append(lines, ansi.Truncate(it.group, cw, "…"), ansi.Truncate(status, cw, "…"))
+	text := []string{zone.Mark("group:"+it.group, ansi.Truncate(it.group, textW, "…")), ansi.Truncate(status, textW, "…")}
+	var lines []string
+	for i := 0; i < max(len(bars), len(text)); i++ {
+		bar := strings.Repeat(" ", barW)
+		if i < len(bars) {
+			bar = bars[i]
+		}
+		t := ""
+		if i < len(text) {
+			t = text[i]
+		}
+		lines = append(lines, bar+" "+t)
+	}
 	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(border).
 		Width(cw).Render(strings.Join(lines, "\n"))
 }

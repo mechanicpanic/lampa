@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	zone "github.com/lrstanley/bubblezone"
 
 	"lampa/internal/analysis"
 	"lampa/internal/color"
@@ -358,5 +359,84 @@ func TestHideSleepingLamps(t *testing.T) {
 	m, _ = press(m, runes("l"))
 	if !strings.Contains(m.View(), "lamp-1") {
 		t.Fatal("the lamp list must still show hidden lamps (to switch them on)")
+	}
+}
+
+func TestGroupCardSameHeightAsLampCards(t *testing.T) {
+	lines := strings.Split(ansi.Strip(sized(groupedView(), 100, 34)), "\n")
+	row := -1
+	for i, l := range lines {
+		if strings.Contains(l, "hero") {
+			row = i
+		}
+	}
+	inner := func(l string) string { // the line without the outer frame
+		r := []rune(l)
+		return strings.TrimSpace(string(r[1 : len(r)-1]))
+	}
+	top, bottom := row, row
+	for top > 0 && inner(lines[top-1]) != "" {
+		top--
+	}
+	for bottom < len(lines)-1 && inner(lines[bottom+1]) != "" {
+		bottom++
+	}
+	if bottom-top != 4 {
+		t.Fatalf("card row is %d lines tall, want 5 (3 + borders):\n%s", bottom-top+1, strings.Join(lines[top:bottom+1], "\n"))
+	}
+	for _, l := range lines[top : bottom+1] {
+		if strings.Contains(l, "ikea") && !strings.Contains(l, "█") {
+			t.Fatalf("group name should sit beside the floor bars: %q", l)
+		}
+	}
+}
+
+// click renders the model, finds the zone and clicks in its middle.
+func click(t *testing.T, m tea.Model, id string) (tea.Model, tea.Cmd) {
+	t.Helper()
+	m.View()
+	var z *zone.ZoneInfo
+	for i := 0; i < 100; i++ { // zones are recorded asynchronously
+		if z = zone.Get(id); z != nil && !z.IsZero() {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if z == nil || z.IsZero() {
+		t.Fatalf("no clickable zone %q", id)
+	}
+	return m.Update(tea.MouseMsg{X: (z.StartX + z.EndX) / 2, Y: z.StartY,
+		Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+}
+
+func TestClickTogglesLamps(t *testing.T) {
+	c := &fakeCtl{view: groupedView()}
+	m := tea.Model(New(c))
+	m, _ = press(m, tea.WindowSizeMsg{Width: 100, Height: 34}, tickMsg(time.Now()))
+	run := func(cmd tea.Cmd) {
+		if cmd == nil {
+			t.Fatal("click did nothing")
+		}
+		cmd()
+	}
+
+	_, cmd := click(t, m, "lamp:h")
+	run(cmd)
+	if last := c.calls[len(c.calls)-1]; last != "lamp h false" {
+		t.Fatalf("hero click: %v", c.calls)
+	}
+	_, cmd = click(t, m, "lamp:b")
+	run(cmd)
+	if last := c.calls[len(c.calls)-1]; last != "lamp b false" {
+		t.Fatalf("bottom floor click: %v", c.calls)
+	}
+	n := len(c.calls)
+	_, cmd = click(t, m, "group:ikea")
+	run(cmd)
+	got := strings.Join(c.calls[n:], ",")
+	for _, id := range []string{"t", "m", "b"} {
+		if !strings.Contains(got, "lamp "+id+" false") {
+			t.Fatalf("group click should switch every floor off: %v", c.calls[n:])
+		}
 	}
 }

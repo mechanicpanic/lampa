@@ -205,7 +205,7 @@ func run(args []string) int {
 		go nowplaying.Poll(ctx, nowplaying.Perl, lib, 2*time.Second, ctl.setTrack)
 	}
 
-	p := tea.NewProgram(tui.New(ctl), tea.WithAltScreen(), tea.WithContext(ctx))
+	p := tea.NewProgram(tui.New(ctl), tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithContext(ctx))
 	_, runErr := p.Run()
 
 	cancel()
