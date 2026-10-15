@@ -11,6 +11,14 @@
 
 Музыка с Mac → лампы Yeelight (music mode) и WiZ в реальном времени. TUI со спектром, долями и живыми плашками ламп.
 
+## Установка
+
+```bash
+brew install mechanicpanic/tap/lampa
+```
+
+Собирается из исходников (нужны Xcode Command Line Tools для Swift).
+
 ## Сборка
 
 ```bash

@@ -106,8 +106,7 @@ func findTap(flagPath string) string {
 		return flagPath
 	}
 	if exe, err := os.Executable(); err == nil {
-		p := filepath.Join(filepath.Dir(exe), "lampa-tap")
-		if _, err := os.Stat(p); err == nil {
+		if p := findTapFrom(exe); p != "" {
 			return p
 		}
 	}
@@ -115,6 +114,23 @@ func findTap(flagPath string) string {
 		return p
 	}
 	return "lampa-tap"
+}
+
+// findTapFrom looks for lampa-tap next to the executable (make builds into
+// bin/) and in ../libexec of its real location (Homebrew links bin/lampa
+// into the prefix and keeps helpers out of PATH).
+func findTapFrom(exe string) string {
+	dirs := []string{filepath.Dir(exe)}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		dirs = append(dirs, filepath.Dir(real), filepath.Join(filepath.Dir(real), "..", "libexec"))
+	}
+	for _, d := range dirs {
+		p := filepath.Join(d, "lampa-tap")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
 }
 
 func paletteIndex(name string) int {

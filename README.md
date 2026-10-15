@@ -17,6 +17,14 @@ Your Mac's music → Yeelight and WiZ bulbs, in real time. A cozy terminal UI wi
 - Shows the Now Playing track (any player that appears in Control Center)
 - Puts every lamp back the way it was when you quit
 
+## Install
+
+```bash
+brew install mechanicpanic/tap/lampa
+```
+
+Builds from source (needs the Xcode Command Line Tools for Swift).
+
 ## Build
 
 ```bash

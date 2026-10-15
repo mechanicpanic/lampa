@@ -165,3 +165,25 @@ func TestGroupAndLevelReachTheLamp(t *testing.T) {
 		t.Fatalf("%+v", l)
 	}
 }
+
+func TestFindTapInHomebrewLayout(t *testing.T) {
+	// /opt/homebrew/bin/lampa -> Cellar/lampa/0.1.0/bin/lampa; helpers in libexec.
+	root := t.TempDir()
+	cellar := filepath.Join(root, "Cellar", "lampa", "0.1.0")
+	os.MkdirAll(filepath.Join(cellar, "bin"), 0o755)
+	os.MkdirAll(filepath.Join(cellar, "libexec"), 0o755)
+	os.MkdirAll(filepath.Join(root, "bin"), 0o755)
+	real := filepath.Join(cellar, "bin", "lampa")
+	os.WriteFile(real, nil, 0o755)
+	tap := filepath.Join(cellar, "libexec", "lampa-tap")
+	os.WriteFile(tap, nil, 0o755)
+	link := filepath.Join(root, "bin", "lampa")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := filepath.EvalSymlinks(findTapFrom(link))
+	want, _ := filepath.EvalSymlinks(tap)
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
