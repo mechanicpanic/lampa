@@ -76,6 +76,8 @@ var ru = map[string]string{
 	"✿ Lamps":                              "✿ Лампы",
 	"no lamps — close this and press d":    "ламп нет — закрой и нажми d",
 	"↑↓ choose · space on/off · esc close": "↑↓ выбрать · space вкл/выкл · esc закрыть",
+	"h hide sleeping":                      "h скрыть выключенные",
+	"h show sleeping":                      "h показать выключенные",
 	// status messages
 	"sources: ":           "источники: ",
 	"discovery: ":         "поиск: ",

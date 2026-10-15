@@ -165,7 +165,19 @@ func spectrum(bands []float64, palette string, width, rows int) []string {
 			for end < width && end*n/width == band {
 				end++
 			}
-			b.WriteString(styles[band].Render(string(runes[start:end])))
+			seg := string(runes[start:end])
+			if r == rows-1 { // keep a faint floor so silence doesn't look broken
+				for _, ch := range runes[start:end] {
+					if ch == ' ' {
+						b.WriteString(styles[band].Faint(true).Render("▁"))
+					} else {
+						b.WriteString(styles[band].Render(string(ch)))
+					}
+				}
+				start = end
+				continue
+			}
+			b.WriteString(styles[band].Render(seg))
 			start = end
 		}
 		out[r] = b.String()
@@ -286,6 +298,9 @@ func (m Model) items() []lampItem {
 	at := map[string]int{}
 	for i := range m.v.Lamps {
 		l := m.v.Lamps[i]
+		if m.hideSleeping && !l.Enabled {
+			continue // hidden by choice; still listed in the lamp picker
+		}
 		if l.Info.Group == "" {
 			out = append(out, lampItem{single: &m.v.Lamps[i]})
 			continue
@@ -368,7 +383,7 @@ func tile(l engine.LampView, fps float64, width int) string {
 func (m Model) bottom(inner int, compact bool) []string {
 	out := m.pills(inner, compact)
 	if notes := m.notes(); notes != "" {
-		out = append(out, notes)
+		out = append(out, lipgloss.PlaceHorizontal(inner, lipgloss.Center, notes))
 	}
 	return append(out, actionLines(inner)...)
 }
@@ -481,7 +496,11 @@ func (m Model) lampPickerView() []string {
 	if len(m.v.Lamps) == 0 {
 		out = append(out, dim.Render(i18n.T("no lamps — close this and press d")))
 	}
-	return append(out, "", dim.Render(i18n.T("↑↓ choose · space on/off · esc close")))
+	hide := i18n.T("h hide sleeping")
+	if m.hideSleeping {
+		hide = i18n.T("h show sleeping")
+	}
+	return append(out, "", dim.Render(i18n.T("↑↓ choose · space on/off · esc close")+" · "+hide))
 }
 
 // The heart beats: full on the beat, then fades step by step until the next.

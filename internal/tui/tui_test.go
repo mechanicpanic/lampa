@@ -44,10 +44,12 @@ func (f *fakeCtl) TogglePause() { f.calls = append(f.calls, "pause") }
 func (f *fakeCtl) Sources(context.Context) ([]audio.App, error) {
 	return []audio.App{{PID: 42, Name: "Spotify"}}, nil
 }
-func (f *fakeCtl) SetSource(a *audio.App) { f.source = a; f.calls = append(f.calls, "source") }
-func (f *fakeCtl) SourceName() string     { return "whole system" }
-func (f *fakeCtl) SetLang(l string)       { f.calls = append(f.calls, "lang "+l) }
-func (f *fakeCtl) NowPlaying() string     { return f.track }
+func (f *fakeCtl) SetSource(a *audio.App)  { f.source = a; f.calls = append(f.calls, "source") }
+func (f *fakeCtl) SourceName() string      { return "whole system" }
+func (f *fakeCtl) SetLang(l string)        { f.calls = append(f.calls, "lang "+l) }
+func (f *fakeCtl) NowPlaying() string      { return f.track }
+func (f *fakeCtl) HideSleeping() bool      { return false }
+func (f *fakeCtl) SetHideSleeping(on bool) { f.calls = append(f.calls, fmt.Sprintf("hide %v", on)) }
 func (f *fakeCtl) SetLampEnabled(id string, on bool) {
 	f.calls = append(f.calls, fmt.Sprintf("lamp %s %v", id, on))
 }

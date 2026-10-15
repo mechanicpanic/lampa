@@ -128,3 +128,17 @@ func (c *controller) SetLang(lang string) {
 	c.cfg.Lang = lang
 	config.Save(c.cfgPath, c.cfg)
 }
+
+func (c *controller) HideSleeping() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cfg.HideSleeping
+}
+
+// SetHideSleeping remembers whether switched-off lamps are hidden.
+func (c *controller) SetHideSleeping(on bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cfg.HideSleeping = on
+	config.Save(c.cfgPath, c.cfg)
+}

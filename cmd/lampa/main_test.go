@@ -187,3 +187,15 @@ func TestFindTapInHomebrewLayout(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+func TestHideSleepingPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.toml")
+	c := &controller{cfgPath: path, cfg: config.Default()}
+	if c.HideSleeping() {
+		t.Fatal("off by default")
+	}
+	c.SetHideSleeping(true)
+	if saved, _ := config.Load(path); !saved.HideSleeping || !c.HideSleeping() {
+		t.Fatalf("not saved: %+v", saved)
+	}
+}

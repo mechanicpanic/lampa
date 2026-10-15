@@ -33,7 +33,8 @@ type Config struct {
 	Sensitivity  float64 `toml:"sensitivity"`
 	LatencyMS    int     `toml:"latency_ms"`
 	SourceBundle string  `toml:"source_bundle,omitempty"`
-	Lang         string  `toml:"lang"` // "ru" or "en"
+	HideSleeping bool    `toml:"hide_sleeping,omitempty"` // hide switched-off lamps on the main screen
+	Lang         string  `toml:"lang"`                    // "ru" or "en"
 	Lamps        []Lamp  `toml:"lamp"`
 }
 

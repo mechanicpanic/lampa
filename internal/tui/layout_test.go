@@ -313,3 +313,50 @@ func TestKeySixIsMeter(t *testing.T) {
 		t.Fatal("mode pill should say 1-6")
 	}
 }
+
+func silentView() engine.View {
+	v := richView(2)
+	for i := range v.Features.Bands {
+		v.Features.Bands[i] = 0
+	}
+	v.History, v.Frames, v.AudioAlive = nil, 0, false
+	return v
+}
+
+func TestSilenceStillShowsABaseline(t *testing.T) {
+	for _, sz := range [][2]int{{100, 30}, {60, 16}} {
+		out := ansi.Strip(sized(silentView(), sz[0], sz[1]))
+		if !strings.Contains(out, strings.Repeat("▁", sz[0]-4)) {
+			t.Fatalf("%dx%d: no spectrum baseline in silence:\n%s", sz[0], sz[1], out)
+		}
+	}
+}
+
+func TestNotesLineCentered(t *testing.T) {
+	for _, l := range strings.Split(ansi.Strip(sized(silentView(), 100, 30)), "\n") {
+		if strings.Contains(l, "no sound") && strings.HasPrefix(strings.TrimPrefix(l, "│"), " no sound") {
+			t.Fatalf("notes line not centered: %q", l)
+		}
+	}
+}
+
+func TestHideSleepingLamps(t *testing.T) {
+	v := richView(3) // lamp-1 is disabled
+	c := &fakeCtl{view: v}
+	m := tea.Model(New(c))
+	m, _ = press(m, tea.WindowSizeMsg{Width: 100, Height: 30}, tickMsg(time.Now()))
+	if !strings.Contains(m.View(), "lamp-1") {
+		t.Fatal("sleeping lamp should show by default")
+	}
+	m, _ = press(m, runes("l"), runes("h"), tea.KeyMsg{Type: tea.KeyEsc})
+	if strings.Contains(m.View(), "lamp-1") || !strings.Contains(m.View(), "lamp-0") {
+		t.Fatalf("h in the lamp list should hide sleeping lamps:\n%s", m.View())
+	}
+	if c.calls[len(c.calls)-1] != "hide true" {
+		t.Fatalf("choice not remembered: %v", c.calls)
+	}
+	m, _ = press(m, runes("l"))
+	if !strings.Contains(m.View(), "lamp-1") {
+		t.Fatal("the lamp list must still show hidden lamps (to switch them on)")
+	}
+}

@@ -28,7 +28,9 @@ type Controller interface {
 	Discover(ctx context.Context) (added int, err error)
 	SetLampEnabled(id string, on bool)
 	SetLang(lang string) // remember the UI language
-	NowPlaying() string  // "Artist — Title" or ""
+	NowPlaying() string
+	HideSleeping() bool      // hide switched-off lamps from the main screen
+	SetHideSleeping(on bool) // "Artist — Title" or ""
 }
 
 type tickMsg time.Time
@@ -44,15 +46,16 @@ type discoveredMsg struct {
 }
 
 type Model struct {
-	c          Controller
-	v          engine.View
-	width      int
-	height     int
-	picking    bool
-	apps       []audio.App
-	cursor     int
-	lamps      bool // lamp picker open
-	lampCursor int
+	c            Controller
+	v            engine.View
+	width        int
+	height       int
+	picking      bool
+	apps         []audio.App
+	cursor       int
+	lamps        bool // lamp picker open
+	lampCursor   int
+	hideSleeping bool
 	// display smoothing (the engine's values are raw, per analysis frame)
 	bands    [analysis.NumBands]float64
 	fps      map[string]float64
@@ -64,7 +67,7 @@ type Model struct {
 }
 
 func New(c Controller) Model {
-	return Model{c: c, v: c.View(), width: 80, height: 24, fps: map[string]float64{}}
+	return Model{c: c, v: c.View(), width: 80, height: 24, fps: map[string]float64{}, hideSleeping: c.HideSleeping()}
 }
 
 func tick() tea.Cmd {
@@ -183,6 +186,9 @@ func (m Model) updateLampPicker(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// switching talks to the lamp (restore / snapshot), so off the UI thread
 			return m, func() tea.Msg { c.SetLampEnabled(l.Info.ID, !l.Enabled); return nil }
 		}
+	case "h":
+		m.hideSleeping = !m.hideSleeping
+		m.c.SetHideSleeping(m.hideSleeping)
 	case "esc", "q", "l":
 		m.lamps = false
 	}
