@@ -17,9 +17,10 @@ func TestSplit(t *testing.T) {
 	if lvl != 0.25 { // gamma 2
 		t.Fatalf("gamma: %v", lvl)
 	}
-	r, g, b, lvl = Split(Frame{R: 200, G: 100, B: 50, Brightness: 0.2}, 0.1)
+	// (no white in this color, so only the brightness scaling applies)
+	r, g, b, lvl = Split(Frame{R: 200, G: 100, B: 0, Brightness: 0.2}, 0.1)
 	// p = 0.04 < floor: level stays at floor, rgb scaled by 0.4
-	if lvl != 0.1 || r != 80 || g != 40 || b != 20 {
+	if lvl != 0.1 || r != 80 || g != 40 || b != 0 {
 		t.Fatalf("below floor: %d %d %d %v", r, g, b, lvl)
 	}
 	r, g, b, _ = Split(Frame{R: 10, G: 0, B: 0, Brightness: 0}, 0.1)
@@ -169,5 +170,20 @@ func TestSuspendDropsPendingAndWaitsForInFlight(t *testing.T) {
 	time.Sleep(80 * time.Millisecond)
 	if got := l.frames(); got[len(got)-1].R != 4 {
 		t.Fatalf("after Resume: %v", got)
+	}
+}
+
+func TestSplitMakesScreenColorsVividForLamps(t *testing.T) {
+	// A screen green (78,167,57) looked white on a WiZ: the shared part of
+	// r,g,b is rendered as white light. Most of it is removed for lamps.
+	r, g, b, _ := Split(Frame{R: 78, G: 167, B: 57, Brightness: 1}, 0.1)
+	if g != 167 || float64(r) > 0.35*float64(g) || float64(b) > 0.35*float64(g) {
+		t.Fatalf("green still washed out: %d %d %d", r, g, b)
+	}
+	if r, g, b, _ := Split(Frame{R: 255, Brightness: 1}, 0.1); r != 255 || g != 0 || b != 0 {
+		t.Fatalf("pure red changed: %d %d %d", r, g, b)
+	}
+	if r, g, b, _ := Split(Frame{R: 200, G: 200, B: 200, Brightness: 1}, 0.1); r != 200 || g != 200 || b != 200 {
+		t.Fatalf("white must stay white: %d %d %d", r, g, b)
 	}
 }
