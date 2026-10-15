@@ -27,8 +27,12 @@ func (m *Spectrum) Envelope() (time.Duration, time.Duration) { return 0, 150 * t
 func (m *Spectrum) Update(f analysis.Features, c Context) Scene {
 	m.hue += m.clk.dt(f.Time) * 0.01
 	s := make(Scene, len(c.Lights))
+	st := stacks(c)
 	for i, l := range c.Lights {
 		g := defaultGroups[i%len(defaultGroups)]
+		if st[i].n > 0 {
+			g = st[i].verticalBand() // stacked: bass at the bottom, highs on top
+		}
 		for j, n := range groupNames {
 			if l.Role == n {
 				g = j

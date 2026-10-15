@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -34,7 +35,7 @@ const (
 	tileWidth          = 18 // including its rounded border
 )
 
-var modeIcons = map[string]string{"Pulse": "✺", "Spectrum": "≋", "Chase": "↻", "Ambient": "☁", "Drop": "✦"}
+var modeIcons = map[string]string{"Pulse": "✺", "Spectrum": "≋", "Chase": "↻", "Ambient": "☁", "Drop": "✦", "Meter": "▮"}
 
 func spectrumRows(bands []float64, rows int) []string {
 	out := make([]string, rows)
@@ -208,16 +209,13 @@ func (m Model) tiles(inner, avail int) []string {
 func (m Model) chips(inner int) []string {
 	var lines []string
 	cur := ""
-	for _, l := range m.v.Lamps {
-		dot := lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color.Hex())).Render("●")
-		mark := ok.Render("♪")
-		switch {
-		case !l.Enabled:
-			dot, mark = dim.Render("○"), dim.Render("💤")
-		case l.Stats.Status == light.StatusLost:
-			mark = warn.Render("✕")
+	for _, it := range m.items() {
+		var chip string
+		if it.group != "" {
+			chip = groupChip(it)
+		} else {
+			chip = lampChip(*it.single)
 		}
-		chip := dot + " " + l.Info.Name + " " + mark
 		if cur != "" && lipgloss.Width(cur)+3+lipgloss.Width(chip) > inner {
 			lines = append(lines, cur)
 			cur = ""
@@ -234,14 +232,91 @@ func (m Model) chips(inner int) []string {
 	return lines
 }
 
+func lampChip(l engine.LampView) string {
+	dot := lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color.Hex())).Render("●")
+	mark := ok.Render("♪")
+	switch {
+	case !l.Enabled:
+		dot, mark = dim.Render("○"), dim.Render("💤")
+	case l.Stats.Status == light.StatusLost:
+		mark = warn.Render("✕")
+	}
+	return dot + " " + l.Info.Name + " " + mark
+}
+
+// groupChip: one ▮ per floor, bottom to top left to right.
+func groupChip(it lampItem) string {
+	var b strings.Builder
+	for i := len(it.members) - 1; i >= 0; i-- {
+		l := it.members[i]
+		if l.Enabled {
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color.Hex())).Render("▮"))
+		} else {
+			b.WriteString(dim.Render("▯"))
+		}
+	}
+	return b.String() + " " + it.group + " " + groupMark(it)
+}
+
+func groupMark(it lampItem) string {
+	all, lost := true, false
+	for _, l := range it.members {
+		all = all && !l.Enabled
+		lost = lost || (l.Enabled && l.Stats.Status == light.StatusLost)
+	}
+	switch {
+	case all:
+		return dim.Render("💤")
+	case lost:
+		return warn.Render("✕")
+	}
+	return ok.Render("♪")
+}
+
+// lampItem is one card: a single lamp, or a stacked group (members top first).
+type lampItem struct {
+	single  *engine.LampView
+	group   string
+	members []engine.LampView
+}
+
+// items: lamps in view order; a group appears once, where its first lamp is.
+func (m Model) items() []lampItem {
+	var out []lampItem
+	at := map[string]int{}
+	for i := range m.v.Lamps {
+		l := m.v.Lamps[i]
+		if l.Info.Group == "" {
+			out = append(out, lampItem{single: &m.v.Lamps[i]})
+			continue
+		}
+		k, ok := at[l.Info.Group]
+		if !ok {
+			k = len(out)
+			at[l.Info.Group] = k
+			out = append(out, lampItem{group: l.Info.Group})
+		}
+		out[k].members = append(out[k].members, l)
+	}
+	for _, it := range out {
+		sort.SliceStable(it.members, func(a, b int) bool { return it.members[a].Info.Level > it.members[b].Info.Level })
+	}
+	return out
+}
+
 func (m Model) cards(inner int) []string {
 	per := max(1, (inner+1)/(tileWidth+1))
 	tw := min(inner, (inner+1)/per-1) // stretch tiles to use the row
 	var rows []string
-	for i := 0; i < len(m.v.Lamps); i += per {
+	items := m.items()
+	for i := 0; i < len(items); i += per {
 		var row []string
-		for _, l := range m.v.Lamps[i:min(i+per, len(m.v.Lamps))] {
-			row = append(row, tile(l, m.shownFPS(l), tw))
+		for _, it := range items[i:min(i+per, len(items))] {
+			if it.group != "" {
+				row = append(row, m.groupTile(it, tw))
+			} else {
+				row = append(row, tile(*it.single, m.shownFPS(*it.single), tw))
+			}
 		}
 		joined := lipgloss.JoinHorizontal(lipgloss.Top, intersperse(row, " ")...)
 		rows = append(rows, lipgloss.PlaceHorizontal(inner, lipgloss.Center, joined))
@@ -321,7 +396,7 @@ func meter(v float64) string {
 func (m Model) pills(inner int, compact bool) []string {
 	v := m.v
 	items := []string{
-		pill("1-5", modeIcons[v.Mode]+" "+v.Mode),
+		pill("1-6", modeIcons[v.Mode]+" "+v.Mode),
 		pill("p", swatch(v.Palette)+" "+v.Palette),
 		pill("←→", meter(v.Sensitivity)+" "+fmt.Sprintf("%.2f", v.Sensitivity)),
 		pill("↑↓", "◷ "+fmt.Sprintf(i18n.T("%+d ms"), v.Latency.Milliseconds())),
@@ -436,4 +511,29 @@ func heartLevel(phase float64) int {
 		return 1
 	}
 	return 0
+}
+
+// groupTile: one card for a stacked fixture — a bar per floor, top first.
+func (m Model) groupTile(it lampItem, width int) string {
+	cw := width - 2
+	var lines []string
+	fps := math.Inf(1)
+	for _, l := range it.members {
+		fill := lipgloss.NewStyle().Foreground(lipgloss.Color(l.Color.Hex()))
+		full := int(math.Round(l.Brightness * float64(cw)))
+		bar := fill.Render(strings.Repeat("█", full)) + fill.Faint(true).Render(strings.Repeat("░", cw-full))
+		if !l.Enabled {
+			bar = dim.Render(strings.Repeat("░", cw))
+		} else {
+			fps = math.Min(fps, m.shownFPS(l))
+		}
+		lines = append(lines, bar)
+	}
+	status := groupMark(it)
+	if !math.IsInf(fps, 1) && status == ok.Render("♪") {
+		status = ok.Render(fmt.Sprintf("♪ %.0f fps", fps))
+	}
+	lines = append(lines, ansi.Truncate(it.group, cw, "…"), ansi.Truncate(status, cw, "…"))
+	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(border).
+		Width(cw).Render(strings.Join(lines, "\n"))
 }

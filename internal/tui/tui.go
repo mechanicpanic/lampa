@@ -130,7 +130,7 @@ func (m Model) updateKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch s := k.String(); s {
 	case "q", "ctrl+c":
 		return m, tea.Quit
-	case "1", "2", "3", "4", "5":
+	case "1", "2", "3", "4", "5", "6":
 		m.c.SetMode(int(s[0] - '1'))
 	case "p":
 		m.c.NextPalette()

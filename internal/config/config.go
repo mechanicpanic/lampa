@@ -20,6 +20,8 @@ type Lamp struct {
 	Name     string  `toml:"name"`
 	Model    string  `toml:"model,omitempty"`
 	Role     string  `toml:"role,omitempty"`
+	Group    string  `toml:"group,omitempty"` // lamps in one fixture, e.g. "ikea"
+	Level    int     `toml:"level,omitempty"` // position in the group, 1 = bottom
 	Music    bool    `toml:"music"`
 	MaxFPS   float64 `toml:"max_fps,omitempty"`
 	Disabled bool    `toml:"disabled,omitempty"`

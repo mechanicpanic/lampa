@@ -36,7 +36,7 @@ bin/lampa --wav track.wav   # from a file
 bin/lampa --lang en         # English UI (default: Russian; press t to switch)
 ```
 
-Keys: `1–5` mode (Pulse, Spectrum, Chase, Ambient, Drop), `p` palette, `←/→` sensitivity, `↑/↓` light delay, `s` audio source, `l` choose lamps (on/off, remembered), `d` find lamps, `t` language, `space` pause, `q` quit (lamps go back to how they were).
+Keys: `1–6` mode (Pulse, Spectrum, Chase, Ambient, Drop, Meter), `p` palette, `←/→` sensitivity, `↑/↓` light delay, `s` audio source, `l` choose lamps (on/off, remembered), `d` find lamps, `t` language, `space` pause, `q` quit (lamps go back to how they were).
 
 ## Lamp roles
 
@@ -61,6 +61,19 @@ In Spectrum mode (`2`) every lamp follows one part of the sound. Set it per lamp
 ```
 
 Lamps without a role take bass, mid and high in turn. Other modes ignore roles: Pulse flashes every lamp on the beat, Chase walks around them.
+
+## Stacked lamps
+
+Bulbs that sit one above another in a single fixture can be a group. Give each the same `group` and its floor, `level = 1` at the bottom:
+
+```toml
+[[lamp]]
+  name = "ikea bottom"
+  group = "ikea"
+  level = 1
+```
+
+Then Spectrum puts the bass at the bottom and the highs on top, Pulse flashes floor by floor from the bottom up like a fountain, Meter (`6`) fills the fixture like a volume meter, and the UI shows the group as one tall card.
 
 ## Notes
 

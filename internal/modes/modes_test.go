@@ -1,6 +1,7 @@
 package modes
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"testing"
@@ -158,5 +159,69 @@ func TestDropFlashesAfterBuild(t *testing.T) {
 	s = calm.Update(analysis.Features{Time: 0, OnsetLow: kick, Loudness: 1}, ctxN(2))
 	if s[0].Color.C == 0 && s[0].Brightness == 1 {
 		t.Fatal("flash without a build")
+	}
+}
+
+// ikea: three stacked lamps listed in a scrambled order (top, bottom, middle).
+func ikea() Context {
+	c := Context{Palette: color.Palettes[0]}
+	for _, lv := range []int{3, 1, 2} {
+		c.Lights = append(c.Lights, light.Info{ID: fmt.Sprint(lv), Group: "ikea", Level: lv})
+	}
+	return c
+}
+
+const top, bottom, middle = 0, 1, 2 // indexes into ikea().Lights
+
+func TestSpectrumStackedBassAtTheBottom(t *testing.T) {
+	m := &Spectrum{}
+	s := m.Update(analysis.Features{Groups: analysis.Groups{Bass: 0.9, Mid: 0.1, High: 0.5}}, ikea())
+	if s[bottom].Brightness != 0.9 || s[middle].Brightness != 0.1 || s[top].Brightness != 0.5 {
+		t.Fatalf("bottom/middle/top = %.1f/%.1f/%.1f, want bass/mid/high 0.9/0.1/0.5",
+			s[bottom].Brightness, s[middle].Brightness, s[top].Brightness)
+	}
+}
+
+func TestPulseRisesLikeAFountain(t *testing.T) {
+	m := &Pulse{}
+	beat := analysis.Features{Beat: true, Confidence: 1}
+	s := m.Update(beat, ikea())
+	if s[bottom].Brightness != 1 || s[middle].Brightness == 1 || s[top].Brightness == 1 {
+		t.Fatalf("on the beat only the bottom should flash: %v", s)
+	}
+	lit := map[int]time.Duration{}
+	for ms := 10; ms <= 300; ms += 10 {
+		f := analysis.Features{Time: time.Duration(ms) * time.Millisecond, Confidence: 1}
+		for i, tg := range m.Update(f, ikea()) {
+			if _, seen := lit[i]; !seen && tg.Brightness == 1 {
+				lit[i] = f.Time
+			}
+		}
+	}
+	if !(lit[middle] > 0 && lit[top] > lit[middle]) {
+		t.Fatalf("flash should climb bottom → middle → top, lit at %v", lit)
+	}
+	single := m.Update(beat, ctxN(2))
+	if single[0].Brightness != 1 || single[1].Brightness != 1 {
+		t.Fatal("ungrouped lamps still flash together on the beat")
+	}
+}
+
+func TestMeterFillsFromTheBottom(t *testing.T) {
+	m := &Meter{}
+	s := m.Update(analysis.Features{Loudness: 0.4}, ikea())
+	if s[bottom].Brightness != 1 || s[middle].Brightness < 0.1 || s[middle].Brightness > 0.3 || s[top].Brightness != 0 {
+		t.Fatalf("40%%: bottom/middle/top = %.2f/%.2f/%.2f", s[bottom].Brightness, s[middle].Brightness, s[top].Brightness)
+	}
+	s = m.Update(analysis.Features{Time: 10 * time.Millisecond, Loudness: 1}, ikea())
+	if s[top].Brightness != 1 {
+		t.Fatalf("full loudness should light the top: %.2f", s[top].Brightness)
+	}
+	s = m.Update(analysis.Features{Time: 20 * time.Millisecond, Loudness: 0}, ikea())
+	if s[top].Brightness < 0.5 {
+		t.Fatal("meter should fall slowly, not drop in one frame")
+	}
+	if Index("meter") != 5 || len(All()) != 6 {
+		t.Fatal("Meter must be mode 6")
 	}
 }

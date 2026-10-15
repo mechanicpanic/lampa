@@ -23,6 +23,8 @@ type Info struct {
 	ID, Name, Model, Role string
 	Kind                  Kind
 	MaxFPS                float64
+	Group                 string // lamps stacked in one fixture
+	Level                 int    // 1 = bottom of the group
 }
 
 type State struct{ Data map[string]any }

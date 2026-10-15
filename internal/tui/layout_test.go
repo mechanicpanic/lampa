@@ -237,7 +237,7 @@ func TestSettingsAsPills(t *testing.T) {
 	v := richView(1)
 	v.Palette, v.Sensitivity, v.Latency = "ocean", 0.55, 200*time.Millisecond
 	out := ansi.Strip(sized(v, 100, 30))
-	for _, want := range []string{"1-5 ✺ Pulse", "p ■■■ ocean", "←→ ▰▰▰▱▱ 0.55", "↑↓ ◷ +200 ms", "s source", "q quit"} {
+	for _, want := range []string{"1-6 ✺ Pulse", "p ■■■ ocean", "←→ ▰▰▰▱▱ 0.55", "↑↓ ◷ +200 ms", "s source", "q quit"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q:\n%s", want, out)
 		}
@@ -268,5 +268,48 @@ func TestHeaderShowsTrack(t *testing.T) {
 	c.track = strings.Repeat("Very Long Artist Name ", 10)
 	if out := sized(c.view, 60, 20); !strings.Contains(out, "✿ lampa") {
 		t.Fatalf("long title pushed the header out:\n%s", out)
+	}
+}
+
+func groupedView() engine.View {
+	v := richView(0)
+	add := func(id, name string, lv int, c color.RGB) {
+		v.Lamps = append(v.Lamps, engine.LampView{Info: light.Info{ID: id, Name: name, Group: func() string {
+			if lv > 0 {
+				return "ikea"
+			}
+			return ""
+		}(), Level: lv, MaxFPS: 20}, Enabled: true, Color: c, Brightness: 0.8,
+			Stats: light.Stats{Status: light.StatusOK, FPS: 20}})
+	}
+	add("t", "ikea top", 3, color.RGB{R: 1})
+	add("h", "hero", 0, color.RGB{G: 1})
+	add("b", "ikea bottom", 1, color.RGB{B: 1})
+	add("m", "ikea middle", 2, color.RGB{R: 1, G: 1})
+	return v
+}
+
+func TestStackedGroupIsOneCard(t *testing.T) {
+	out := ansi.Strip(sized(groupedView(), 100, 34))
+	if strings.Count(out, "ikea") != 1 || strings.Contains(out, "ikea top") {
+		t.Fatalf("group should be one card titled ikea:\n%s", out)
+	}
+	if !strings.Contains(out, "hero") {
+		t.Fatalf("ungrouped lamp missing:\n%s", out)
+	}
+	short := ansi.Strip(sized(groupedView(), 60, 16))
+	if strings.Count(short, "ikea") != 1 {
+		t.Fatalf("group should be one chip in short windows:\n%s", short)
+	}
+}
+
+func TestKeySixIsMeter(t *testing.T) {
+	c := &fakeCtl{}
+	press(tea.Model(New(c)), runes("6"))
+	if len(c.calls) == 0 || c.calls[0] != "mode5" {
+		t.Fatalf("calls %v", c.calls)
+	}
+	if out := ansi.Strip(sized(richView(0), 100, 30)); !strings.Contains(out, "1-6") {
+		t.Fatal("mode pill should say 1-6")
 	}
 }

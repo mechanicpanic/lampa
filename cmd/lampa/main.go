@@ -38,7 +38,7 @@ func main() {
 }
 
 func info(l config.Lamp) light.Info {
-	return light.Info{ID: l.ID, Name: l.Name, Model: l.Model, Role: l.Role, MaxFPS: l.MaxFPS}
+	return light.Info{ID: l.ID, Name: l.Name, Model: l.Model, Role: l.Role, MaxFPS: l.MaxFPS, Group: l.Group, Level: l.Level}
 }
 
 func buildLights(cfg config.Config, dry bool) []light.Light {

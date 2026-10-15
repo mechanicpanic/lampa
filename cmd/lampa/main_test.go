@@ -156,3 +156,12 @@ func TestSourceNameTranslatedWithError(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestGroupAndLevelReachTheLamp(t *testing.T) {
+	cfg := config.Default()
+	cfg.Lamps = []config.Lamp{{Kind: "wiz", ID: "a", Name: "ikea top", Group: "ikea", Level: 3}}
+	l := buildLights(cfg, true)[0].Info()
+	if l.Group != "ikea" || l.Level != 3 {
+		t.Fatalf("%+v", l)
+	}
+}

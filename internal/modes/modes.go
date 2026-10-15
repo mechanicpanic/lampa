@@ -30,7 +30,7 @@ type Mode interface {
 }
 
 func All() []Mode {
-	return []Mode{&Pulse{}, &Spectrum{}, &Chase{}, &Ambient{}, &Drop{}}
+	return []Mode{&Pulse{}, &Spectrum{}, &Chase{}, &Ambient{}, &Drop{}, &Meter{}}
 }
 
 func Index(name string) int {
