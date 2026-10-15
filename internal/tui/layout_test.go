@@ -153,3 +153,15 @@ func TestFPSDoesNotFlicker(t *testing.T) {
 		}
 	}
 }
+
+func TestUnsureTempoIsNotShown(t *testing.T) {
+	v := richView(1)
+	v.Features.BPM, v.Features.Confidence = 153, 0.2
+	if out := sized(v, 80, 24); strings.Contains(out, "153") || !strings.Contains(out, "— bpm") {
+		t.Fatalf("unsure tempo shown:\n%s", out)
+	}
+	v.Features.Confidence = 0.8
+	if out := sized(v, 80, 24); !strings.Contains(out, "153 BPM") {
+		t.Fatalf("confident tempo hidden:\n%s", out)
+	}
+}

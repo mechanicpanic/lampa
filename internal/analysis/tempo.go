@@ -12,6 +12,8 @@ const (
 	tempoPriorBPM = 120.0
 	tempoPriorOct = 0.9 // width of the log2 prior, octaves
 	pllGain       = 0.25
+	// estimates (every 0.5 s) a new tempo must win in a row to take over
+	tempoSwitchVotes = 4
 	// onsetBias corrects the systematic offset between when the detector
 	// fires and the true onset (frame time is the window centre).
 	onsetBias = 0 * time.Millisecond
@@ -32,6 +34,9 @@ type tempoTracker struct {
 	low       []float64
 	lastLowOn time.Duration
 	haveLowOn bool
+	// a challenger tempo and how many estimates in a row it has won
+	cand  time.Duration
+	candN int
 }
 
 func newTempoTracker(fps float64) *tempoTracker {
@@ -91,19 +96,48 @@ func (t *tempoTracker) estimate(now time.Duration) {
 	}
 	avg := sum / float64(lagMax-lagMin+1)
 	// parabolic refinement
-	lag := float64(best)
-	if a, b, c := r[best-1], r[best], r[best+1]; a-2*b+c < 0 {
-		lag += 0.5 * (a - c) / (a - 2*b + c)
-	}
-	t.conf = clamp01((r[best] - avg) * 2)
+	lag := float64(best) + refineLag(r[best-1], r[best], r[best+1])
 	p := time.Duration(lag / t.fps * float64(time.Second))
-	if t.period == 0 || math.Abs(float64(p-t.period))/float64(t.period) > 0.05 {
-		t.period = p
-		t.next = t.anchor() + p
-	} else {
+	switch {
+	case t.period == 0:
+		t.adopt(p)
+	case relDiff(p, t.period) <= 0.05:
 		t.period = (t.period*3 + p) / 4
+		t.cand, t.candN = 0, 0
+	default:
+		// A different tempo must win several estimates in a row: music
+		// without drums offers beat, half- and double-time almost equally,
+		// and switching on every estimate made the tempo jump around.
+		if t.cand != 0 && relDiff(p, t.cand) <= 0.05 {
+			t.candN++
+		} else {
+			t.cand, t.candN = p, 1
+		}
+		votes := tempoSwitchVotes
+		if metricallyRelated(p, t.period) {
+			votes *= 2 // half/double/dotted time of the same music: be stubborn
+		}
+		if t.candN >= votes {
+			t.adopt(p)
+		}
+	}
+	// Confidence is about the tempo we actually follow.
+	cur := int(math.Round(t.period.Seconds() * t.fps))
+	if cur >= lagMin && cur <= lagMax {
+		t.conf = clamp01((r[cur] - avg) * 2)
+	} else {
+		t.conf = 0
 	}
 	t.alignPhase(now)
+}
+
+func (t *tempoTracker) adopt(p time.Duration) {
+	t.period, t.next = p, t.anchor()+p
+	t.cand, t.candN = 0, 0
+}
+
+func relDiff(a, b time.Duration) float64 {
+	return math.Abs(float64(a-b)) / float64(b)
 }
 
 // anchor is the latest onset to hang the beat grid on: kicks when the
@@ -230,4 +264,24 @@ func (b *buildMeter) step(powerDB float64, dt time.Duration) float64 {
 	b.fast += (powerDB - b.fast) * (1 - math.Exp(-dt.Seconds()/1.0))
 	b.slow += (powerDB - b.slow) * (1 - math.Exp(-dt.Seconds()/8.0))
 	return clamp01((b.fast - b.slow) / 6)
+}
+
+// refineLag: parabolic sub-bin offset of a peak at b with neighbours a, c.
+// Only meaningful when b is a true local maximum; otherwise stay on the bin.
+func refineLag(a, b, c float64) float64 {
+	if b < a || b < c || a-2*b+c >= 0 {
+		return 0
+	}
+	return max(-0.5, min(0.5, 0.5*(a-c)/(a-2*b+c)))
+}
+
+// metricallyRelated: a is b at another metrical level (×2, ×3/2, ×4/3 or inverse).
+func metricallyRelated(a, b time.Duration) bool {
+	r := float64(a) / float64(b)
+	for _, k := range []float64{2, 1.5, 4.0 / 3} {
+		if math.Abs(r/k-1) < 0.04 || math.Abs(r*k-1) < 0.04 {
+			return true
+		}
+	}
+	return false
 }

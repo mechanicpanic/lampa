@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"math"
+	"math/rand"
 	"slices"
 	"testing"
 	"time"
@@ -122,6 +123,72 @@ func TestBeatGridFollowsKicksNotOffbeatHats(t *testing.T) {
 			if med := abs[len(abs)/2]; med > 0.030 {
 				t.Errorf("bpm %.0f start %.2f: median error %.0f ms (grid on the off-beat?)", bpm, start, med*1000)
 			}
+		}
+	}
+}
+
+func TestRefineLagStaysNearItsBin(t *testing.T) {
+	// The prior-weighted winner need not be the raw peak: a neighbour can be
+	// higher, which made the parabola fly off (265 BPM on Bach).
+	for _, c := range [][3]float64{{1.05, 1, 0.94}, {0.94, 1, 1.05}, {1, 1, 1}, {0.2, 1, 0.3}, {1, 0.5, 1}} {
+		if d := refineLag(c[0], c[1], c[2]); d < -0.5 || d > 0.5 || math.IsNaN(d) {
+			t.Fatalf("refineLag%v = %v", c, d)
+		}
+	}
+	if d := refineLag(0.5, 1, 0.5); d != 0 {
+		t.Fatalf("symmetric peak shifted by %v", d)
+	}
+}
+
+// bachLike: soft sixteenths at `bpm`, the first of every four a bit louder,
+// ±3% rubato, a sustained chord underneath; no percussion.
+func bachLike(bpm, seconds float64, rate int) []float32 {
+	sig := silence(seconds, rate)
+	for _, f := range []float64{131, 196, 262} {
+		pianoNote(sig, 0, f, 0.015, seconds*3, rate)
+	}
+	r := rand.New(rand.NewSource(7))
+	notes := []float64{523, 659, 784, 1047, 880, 698, 587, 494, 440, 587, 698, 880}
+	step := 60 / bpm / 4
+	for i, s := 0, 0.3; s < seconds-0.5; i++ {
+		amp := 0.03
+		if i%4 == 0 {
+			amp = 0.045
+		}
+		pianoNote(sig, int(s*float64(rate)), notes[i%len(notes)], amp, 1.2, rate)
+		s += step * (1 + 0.03*(2*r.Float64()-1))
+	}
+	return sig
+}
+
+func TestTempoStaysPutWithoutDrums(t *testing.T) {
+	fs := pushAll(New(Config{SampleRate: rate}), bachLike(80, 40, rate), 1024)
+	jumps, shown, last := 0, 0, 0.0
+	for _, f := range fs {
+		if f.Time.Seconds() < 10 || f.Confidence < 0.4 || f.BPM == 0 {
+			continue // the UI hides an unsure tempo
+		}
+		shown++
+		if last != 0 && math.Abs(f.BPM-last)/last > 0.08 {
+			jumps++
+		}
+		last = f.BPM
+		if f.BPM < tempoMinBPM-1 || f.BPM > tempoMaxBPM+1 {
+			t.Fatalf("BPM %.1f out of range", f.BPM)
+		}
+	}
+	if jumps > 1 {
+		t.Fatalf("shown tempo jumped %d times (%d frames shown)", jumps, shown)
+	}
+}
+
+func TestRealTempoChangeIsFollowed(t *testing.T) {
+	a, _ := metronome(100, 15, rate)
+	b, _ := metronome(130, 15, rate)
+	fs := pushAll(New(Config{SampleRate: rate}), append(a, b...), 1024)
+	for _, f := range fs {
+		if f.Time.Seconds() > 23 && math.Abs(f.BPM-130) > 3 {
+			t.Fatalf("at %.1f s still %.1f BPM, want 130 (changed at 15 s)", f.Time.Seconds(), f.BPM)
 		}
 	}
 }

@@ -26,10 +26,12 @@ var (
 )
 
 const (
-	levels    = " ▁▂▃▄▅▆▇█"
-	minWidth  = 40
-	minHeight = 12
-	tileWidth = 18 // including its rounded border
+	// below this the tracker is guessing (Bach, ambient): show no number
+	minTempoConfidence = 0.4
+	levels             = " ▁▂▃▄▅▆▇█"
+	minWidth           = 40
+	minHeight          = 12
+	tileWidth          = 18 // including its rounded border
 )
 
 var modeIcons = map[string]string{"Pulse": "✺", "Spectrum": "≋", "Chase": "↻", "Ambient": "☁", "Drop": "✦"}
@@ -115,11 +117,12 @@ func (m Model) mainView(inner, height int) []string {
 func (m Model) header(inner int) string {
 	v := m.v
 	heart := dim.Render("♡")
-	if v.Features.BPM > 0 && v.Features.BeatPhase < 0.18 {
+	sure := v.Features.BPM > 0 && v.Features.Confidence >= minTempoConfidence
+	if sure && v.Features.BeatPhase < 0.18 {
 		heart = accent.Render("♥")
 	}
 	bpm := dim.Render("— bpm")
-	if v.Features.BPM > 0 {
+	if sure {
 		bpm = fmt.Sprintf("%.0f BPM", v.Features.BPM)
 	}
 	left := accent.Render("✿ lampa") + "  " + soft.Render(modeIcons[v.Mode]+" "+v.Mode) + dim.Render(" · ") + bpm + " " + heart

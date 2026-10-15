@@ -8,7 +8,7 @@ import (
 
 const (
 	onsetGamma      = 20.0                    // log compression: log1p(gamma*mag)
-	onsetMinFlux    = 1.0                     // absolute floor of the threshold
+	onsetMinFlux    = 0.3                     // absolute floor of the threshold (silence, hiss)
 	onsetHistory    = 1500 * time.Millisecond // median window
 	onsetRefractory = 80 * time.Millisecond
 	lowCutHz        = 250.0
@@ -85,7 +85,9 @@ func (d *onsetDetector) step(mag []float64, now time.Duration, k float64) (low, 
 }
 
 func (d *onsetDetector) decide(b *fluxBand, flux float64, now time.Duration, k float64) Onset {
-	thr := b.median()*k + onsetMinFlux
+	// Relative to the recent median only: an added constant drowned soft
+	// attacks (piano, harpsichord) in dense music.
+	thr := math.Max(b.median()*k, onsetMinFlux)
 	b.push(flux)
 	if flux <= thr || now-b.lastHit < onsetRefractory {
 		return Onset{}
