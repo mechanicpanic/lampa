@@ -252,3 +252,21 @@ func TestSettingsAsPills(t *testing.T) {
 		t.Fatalf("settings are not pills: %q", pillRow)
 	}
 }
+
+func TestHeaderShowsTrack(t *testing.T) {
+	c := &fakeCtl{view: richView(0), track: "Yasuha — Fly-day Chinatown"}
+	m := tea.Model(New(c))
+	m, _ = press(m, tea.WindowSizeMsg{Width: 100, Height: 30}, tickMsg(time.Now()))
+	if out := m.View(); !strings.Contains(out, "♪ Yasuha — Fly-day Chinatown") || strings.Contains(out, "whole system") {
+		t.Fatalf("track not in header:\n%s", out)
+	}
+	c.track = ""
+	m, _ = press(m, tickMsg(time.Now().Add(time.Second)))
+	if out := m.View(); !strings.Contains(out, "♪ whole system") {
+		t.Fatalf("source not shown without a track:\n%s", out)
+	}
+	c.track = strings.Repeat("Very Long Artist Name ", 10)
+	if out := sized(c.view, 60, 20); !strings.Contains(out, "✿ lampa") {
+		t.Fatalf("long title pushed the header out:\n%s", out)
+	}
+}

@@ -9,6 +9,8 @@ import (
 	"lampa/internal/config"
 	"lampa/internal/discovery"
 	"lampa/internal/engine"
+	"lampa/internal/i18n"
+	"lampa/internal/nowplaying"
 )
 
 // controller adds audio-source switching and discovery to the engine.
@@ -24,6 +26,19 @@ type controller struct {
 	srcCancel context.CancelFunc
 	srcName   string
 	srcErr    string
+	track     string
+}
+
+func (c *controller) setTrack(t nowplaying.Track) {
+	c.mu.Lock()
+	c.track = t.String()
+	c.mu.Unlock()
+}
+
+func (c *controller) NowPlaying() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.track
 }
 
 // tapError records the helper's last error so the TUI can show it
@@ -41,10 +56,11 @@ func (c *controller) Sources(ctx context.Context) ([]audio.App, error) {
 func (c *controller) SourceName() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	name := i18n.T(c.srcName) // translate the name before an error is glued on
 	if c.srcErr != "" && !c.View().AudioAlive {
-		return c.srcName + " · " + c.srcErr
+		return name + " · " + c.srcErr
 	}
-	return c.srcName
+	return name
 }
 
 // SetSource (re)starts the tap; nil = whole system.

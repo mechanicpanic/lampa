@@ -23,6 +23,7 @@ import (
 	"lampa/internal/light/wiz"
 	"lampa/internal/light/yeelight"
 	"lampa/internal/modes"
+	"lampa/internal/nowplaying"
 	"lampa/internal/tui"
 )
 
@@ -89,6 +90,15 @@ func chooseLang(flagValue string, cfg config.Config) i18n.Lang {
 		return i18n.Parse(flagValue)
 	}
 	return i18n.Parse(cfg.Lang)
+}
+
+// nowPlayingLib: libnowplaying.dylib is built next to lampa-tap; "" if absent.
+func nowPlayingLib(tapPath string) string {
+	p := filepath.Join(filepath.Dir(tapPath), "libnowplaying.dylib")
+	if _, err := os.Stat(p); err != nil {
+		return ""
+	}
+	return p
 }
 
 func findTap(flagPath string) string {
@@ -175,6 +185,9 @@ func run(args []string) int {
 		ctl.SetSource(app)
 	}
 	go eng.Run(ctx, ctl.blocks)
+	if lib := nowPlayingLib(ctl.tapPath); lib != "" {
+		go nowplaying.Poll(ctx, nowplaying.Perl, lib, 2*time.Second, ctl.setTrack)
+	}
 
 	p := tea.NewProgram(tui.New(ctl), tea.WithAltScreen(), tea.WithContext(ctx))
 	_, runErr := p.Run()

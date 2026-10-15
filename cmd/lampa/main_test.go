@@ -12,6 +12,7 @@ import (
 	"lampa/internal/engine"
 	"lampa/internal/i18n"
 	"lampa/internal/light"
+	"lampa/internal/nowplaying"
 )
 
 func TestBuildLightsDryUsesConfigNames(t *testing.T) {
@@ -119,5 +120,39 @@ func TestLangFlagOverridesConfig(t *testing.T) {
 	}
 	if got := chooseLang("ru", cfg); got != i18n.RU {
 		t.Fatalf("flag ignored: %s", got)
+	}
+}
+
+func TestNowPlayingLibSitsNextToTap(t *testing.T) {
+	dir := t.TempDir()
+	tap := filepath.Join(dir, "lampa-tap")
+	if got := nowPlayingLib(tap); got != "" {
+		t.Fatalf("no lib yet, got %q", got)
+	}
+	lib := filepath.Join(dir, "libnowplaying.dylib")
+	os.WriteFile(lib, nil, 0o644)
+	if got := nowPlayingLib(tap); got != lib {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestControllerTrack(t *testing.T) {
+	c := &controller{}
+	if c.NowPlaying() != "" {
+		t.Fatal("empty at start")
+	}
+	c.setTrack(nowplaying.Track{Title: "Fly-day Chinatown", Artist: "Yasuha"})
+	if got := c.NowPlaying(); got != "Yasuha — Fly-day Chinatown" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestSourceNameTranslatedWithError(t *testing.T) {
+	defer i18n.Set(i18n.Current())
+	i18n.Set(i18n.RU)
+	eng := engine.New(engine.Options{})
+	c := &controller{Engine: eng, srcName: "whole system", srcErr: "tap header: EOF"}
+	if got := c.SourceName(); got != "вся система · tap header: EOF" {
+		t.Fatalf("%q", got)
 	}
 }

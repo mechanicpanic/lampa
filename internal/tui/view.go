@@ -129,12 +129,16 @@ func (m Model) header(inner int) string {
 		bpm = fmt.Sprintf("%.0f BPM", v.Features.BPM)
 	}
 	left := accent.Render("✿ lampa") + "  " + soft.Render(modeIcons[v.Mode]+" "+v.Mode) + dim.Render(" · ") + bpm + " " + heart
-	right := dim.Render("♪ " + i18n.T(m.c.SourceName()))
-	gap := inner - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 2 {
+	what := m.c.NowPlaying() // the track, else where the sound comes from
+	if what == "" {
+		what = i18n.T(m.c.SourceName())
+	}
+	room := inner - lipgloss.Width(left) - 2
+	if room < 8 {
 		return left
 	}
-	return left + strings.Repeat(" ", gap) + right
+	right := dim.Render(ansi.Truncate("♪ "+what, room, "…"))
+	return left + strings.Repeat(" ", inner-lipgloss.Width(left)-lipgloss.Width(right)) + right
 }
 
 // spectrum spreads the bands over exactly `width` columns.

@@ -28,6 +28,7 @@ type Controller interface {
 	Discover(ctx context.Context) (added int, err error)
 	SetLampEnabled(id string, on bool)
 	SetLang(lang string) // remember the UI language
+	NowPlaying() string  // "Artist — Title" or ""
 }
 
 type tickMsg time.Time

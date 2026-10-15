@@ -17,6 +17,7 @@ import (
 )
 
 type fakeCtl struct {
+	track  string
 	calls  []string
 	source *audio.App
 	view   engine.View
@@ -46,6 +47,7 @@ func (f *fakeCtl) Sources(context.Context) ([]audio.App, error) {
 func (f *fakeCtl) SetSource(a *audio.App) { f.source = a; f.calls = append(f.calls, "source") }
 func (f *fakeCtl) SourceName() string     { return "whole system" }
 func (f *fakeCtl) SetLang(l string)       { f.calls = append(f.calls, "lang "+l) }
+func (f *fakeCtl) NowPlaying() string     { return f.track }
 func (f *fakeCtl) SetLampEnabled(id string, on bool) {
 	f.calls = append(f.calls, fmt.Sprintf("lamp %s %v", id, on))
 }
