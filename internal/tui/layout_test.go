@@ -89,7 +89,7 @@ func TestAllLampsVisibleWhenWrapped(t *testing.T) {
 
 func TestShortWindowKeepsStatusAndAllLamps(t *testing.T) {
 	out := sized(richView(3), 46, 16)
-	if !strings.Contains(out, "palette") {
+	if !strings.Contains(out, "sunset") {
 		t.Fatalf("status line pushed out:\n%s", out)
 	}
 	for i := 0; i < 3; i++ {
@@ -100,7 +100,7 @@ func TestShortWindowKeepsStatusAndAllLamps(t *testing.T) {
 }
 
 func TestHelpWrapsBeforeDroppingLabels(t *testing.T) {
-	if out := sized(richView(3), 80, 30); !strings.Contains(out, "palette") || !strings.Contains(out, "quit") {
+	if out := sized(richView(3), 80, 30); !strings.Contains(out, "source") || !strings.Contains(out, "quit") {
 		t.Fatalf("labels dropped although two lines fit:\n%s", out)
 	}
 }
@@ -232,3 +232,23 @@ func TestRibbonScrollsOneColumnPerFrame(t *testing.T) {
 }
 
 func ansiStrip(s string) string { return ansi.Strip(s) }
+
+func TestSettingsAsPills(t *testing.T) {
+	v := richView(1)
+	v.Palette, v.Sensitivity, v.Latency = "ocean", 0.55, 200*time.Millisecond
+	out := ansi.Strip(sized(v, 100, 30))
+	for _, want := range []string{"1-5 ✺ Pulse", "p ■■■ ocean", "←→ ▰▰▰▱▱ 0.55", "↑↓ ◷ +200 ms", "s source", "q quit"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q:\n%s", want, out)
+		}
+	}
+	pillRow := ""
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "Pulse") && strings.Contains(l, "ocean") {
+			pillRow = l
+		}
+	}
+	if strings.Count(pillRow, "│") < 2*4 { // 4 pills, each with its own side borders
+		t.Fatalf("settings are not pills: %q", pillRow)
+	}
+}

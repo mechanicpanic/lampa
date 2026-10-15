@@ -92,8 +92,11 @@ func (m Model) View() string {
 func (m Model) mainView(inner, height int) []string {
 	v := m.v
 	header := m.header(inner)
-	status := m.statusLine()
-	help := helpLines(inner)
+	status := m.bottom(inner, false)
+	if height-(5+len(status)) < 12 { // short window: give the room to the spectrum
+		status = m.bottom(inner, true)
+	}
+	var help []string
 
 	// header, gap, ribbon, gap, gap before status — plus status and help.
 	fixed := 5 + len(status) + len(help)
@@ -220,7 +223,11 @@ func (m Model) chips(inner int) []string {
 		}
 		cur += chip
 	}
-	return append(lines, cur)
+	lines = append(lines, cur)
+	for i, l := range lines {
+		lines[i] = lipgloss.PlaceHorizontal(inner, lipgloss.Center, l)
+	}
+	return lines
 }
 
 func (m Model) cards(inner int) []string {
@@ -277,53 +284,90 @@ func tile(l engine.LampView, fps float64, width int) string {
 		Width(cw).Render(strings.Join(lines, "\n"))
 }
 
-func (m Model) statusLine() []string {
-	v := m.v
-	parts := []string{
-		i18n.T("palette") + " " + soft.Render(v.Palette),
-		fmt.Sprintf(i18n.T("sens %.2f"), v.Sensitivity),
-		fmt.Sprintf(i18n.T("delay %+d ms"), v.Latency.Milliseconds()),
+// bottom: the settings as pills (key + current value), an optional line of
+// notes (paused, no sound, messages) and the quieter list of actions.
+func (m Model) bottom(inner int, compact bool) []string {
+	out := m.pills(inner, compact)
+	if notes := m.notes(); notes != "" {
+		out = append(out, notes)
 	}
-	if v.Paused {
-		parts = append(parts, warn.Render(i18n.T("⏸ paused")))
-	}
-	if !v.AudioAlive {
-		parts = append(parts, soft.Render(i18n.T("no sound — play some music ♪")))
-	}
-	out := []string{strings.Join(parts, dim.Render(" · "))}
-	if m.status != "" {
-		out = append(out, soft.Render(m.status))
-	}
-	return out
+	return append(out, actionLines(inner)...)
 }
 
-var helpKeys = [][2]string{
-	{"1-5", "mode"}, {"p", "palette"}, {"←→", "sens"}, {"↑↓", "delay"},
+func pill(key, body string) string {
+	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(border).
+		Padding(0, 1).Render(soft.Render(key) + " " + body)
+}
+
+// swatch: three blocks in the palette's colors.
+func swatch(name string) string {
+	p := paletteByName(name)
+	var b strings.Builder
+	for _, t := range []float64{0, 1.0 / 3, 2.0 / 3} {
+		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(p.At(t).ToRGB().Hex())).Render("■"))
+	}
+	return b.String()
+}
+
+func meter(v float64) string {
+	n := int(math.Round(math.Max(0, math.Min(1, v)) * 5))
+	return soft.Render(strings.Repeat("▰", n)) + dim.Render(strings.Repeat("▱", 5-n))
+}
+
+func (m Model) pills(inner int, compact bool) []string {
+	v := m.v
+	items := []string{
+		pill("1-5", modeIcons[v.Mode]+" "+v.Mode),
+		pill("p", swatch(v.Palette)+" "+v.Palette),
+		pill("←→", meter(v.Sensitivity)+" "+fmt.Sprintf("%.2f", v.Sensitivity)),
+		pill("↑↓", "◷ "+fmt.Sprintf(i18n.T("%+d ms"), v.Latency.Milliseconds())),
+	}
+	if r := lipgloss.JoinHorizontal(lipgloss.Top, intersperse(items, " ")...); !compact && lipgloss.Width(r) <= inner {
+		return strings.Split(lipgloss.PlaceHorizontal(inner, lipgloss.Center, r), "\n")
+	}
+	// narrow or short window: one plain line
+	return []string{lipgloss.PlaceHorizontal(inner, lipgloss.Center, strings.Join([]string{
+		modeIcons[v.Mode] + " " + v.Mode, swatch(v.Palette) + " " + v.Palette,
+		fmt.Sprintf("%.2f", v.Sensitivity), fmt.Sprintf(i18n.T("%+d ms"), v.Latency.Milliseconds()),
+	}, dim.Render(" · ")))}
+}
+
+func (m Model) notes() string {
+	var parts []string
+	if m.v.Paused {
+		parts = append(parts, warn.Render(i18n.T("⏸ paused")))
+	}
+	if !m.v.AudioAlive {
+		parts = append(parts, soft.Render(i18n.T("no sound — play some music ♪")))
+	}
+	if m.status != "" {
+		parts = append(parts, soft.Render(m.status))
+	}
+	return strings.Join(parts, dim.Render(" · "))
+}
+
+var actionKeys = [][2]string{
 	{"s", "source"}, {"l", "lamps"}, {"d", "find"}, {"␣", "pause"}, {"t", "lang"}, {"q", "quit"},
 }
 
-// helpLines: full labels on one or two lines if they fit, otherwise keys only.
-func helpLines(inner int) []string {
-	render := func(keys [][2]string, labels bool) string {
+// actionLines: the actions with labels if they fit, otherwise keys only.
+func actionLines(inner int) []string {
+	render := func(labels bool) string {
 		var parts []string
-		for _, k := range keys {
+		for _, k := range actionKeys {
 			p := soft.Render(k[0])
 			if labels {
 				p += " " + dim.Render(i18n.T(k[1]))
 			}
 			parts = append(parts, p)
 		}
-		return strings.Join(parts, dim.Render("  "))
+		return " " + strings.Join(parts, dim.Render(" · "))
 	}
-	if full := render(helpKeys, true); lipgloss.Width(full) <= inner {
-		return []string{full}
+	line := render(true)
+	if lipgloss.Width(line) > inner {
+		line = render(false)
 	}
-	half := (len(helpKeys) + 1) / 2
-	a, b := render(helpKeys[:half], true), render(helpKeys[half:], true)
-	if lipgloss.Width(a) <= inner && lipgloss.Width(b) <= inner {
-		return []string{a, b}
-	}
-	return []string{render(helpKeys, false)}
+	return []string{lipgloss.PlaceHorizontal(inner, lipgloss.Center, line)}
 }
 
 func (m Model) pickerView() []string {

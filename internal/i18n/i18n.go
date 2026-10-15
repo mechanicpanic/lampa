@@ -56,6 +56,7 @@ var ru = map[string]string{
 	"palette":                      "палитра",
 	"sens %.2f":                    "чувств. %.2f",
 	"delay %+d ms":                 "задержка %+d мс",
+	"%+d ms":                       "%+d мс",
 	"⏸ paused":                     "⏸ пауза",
 	"no sound — play some music ♪": "нет звука — включи музыку ♪",
 	"whole system":                 "вся система",

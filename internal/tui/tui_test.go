@@ -180,11 +180,11 @@ func TestLanguageToggle(t *testing.T) {
 	c := &fakeCtl{view: engine.View{Palette: "sunset", Lamps: []engine.LampView{{Info: light.Info{Name: "hero"}}}}}
 	m := tea.Model(New(c))
 	m, _ = press(m, tea.WindowSizeMsg{Width: 100, Height: 30}, tickMsg(time.Now()))
-	if out := m.View(); !strings.Contains(out, "палитра") || !strings.Contains(out, "выключена") {
+	if out := m.View(); !strings.Contains(out, "выход") || !strings.Contains(out, "выключена") {
 		t.Fatalf("russian expected:\n%s", out)
 	}
 	m, _ = press(m, runes("t"))
-	if out := m.View(); !strings.Contains(out, "palette") || !strings.Contains(out, "sleeping") || strings.Contains(out, "палитра") {
+	if out := m.View(); !strings.Contains(out, "quit") || !strings.Contains(out, "sleeping") || strings.Contains(out, "выход") {
 		t.Fatalf("english expected after t:\n%s", out)
 	}
 	if last := c.calls[len(c.calls)-1]; last != "lang en" {
