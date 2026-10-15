@@ -2,6 +2,13 @@
 
 [English](README.md)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.svg">
+    <img src="docs/images/hero-light.svg" alt="lampa: спектр, лента долей, карточки ламп и пилюли настроек" width="100%">
+  </picture>
+</p>
+
 Музыка с Mac → лампы Yeelight (music mode) и WiZ в реальном времени. TUI со спектром, долями и живыми плашками ламп.
 
 ## Сборка

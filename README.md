@@ -4,6 +4,13 @@ Your Mac's music → Yeelight and WiZ bulbs, in real time. A cozy terminal UI wi
 
 [Русская версия](README.ru.md)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.svg">
+    <img src="docs/images/hero-light.svg" alt="lampa: live spectrum, beat ribbon, lamp cards and settings pills" width="100%">
+  </picture>
+</p>
+
 - Listens to the whole system or a single app (Core Audio process tap, no BlackHole needed)
 - Finds the beat and lands flashes *on* it, with latency compensation
 - Yeelight via **music mode** — no 60 commands/min limit; WiZ via local UDP
