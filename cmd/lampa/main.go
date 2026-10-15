@@ -31,6 +31,11 @@ import (
 var shutdownSignals = []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP}
 
 func main() {
+	i18n.Set(earlyLang(os.Args[1:]))
+	if wantsHelp(os.Args[1:]) {
+		printUsage(os.Stdout)
+		os.Exit(0)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "discover" {
 		os.Exit(runDiscover(os.Args[2:]))
 	}
@@ -144,6 +149,7 @@ func paletteIndex(name string) int {
 
 func run(args []string) int {
 	fs := flag.NewFlagSet("lampa", flag.ExitOnError)
+	fs.Usage = func() { printUsage(fs.Output()) }
 	dry := fs.Bool("dry", false, "no real lamps: virtual lamps on screen only")
 	wavPath := fs.String("wav", "", "play this WAV file instead of system audio")
 	cfgPath := fs.String("config", config.DefaultPath(), "config file")
@@ -232,6 +238,7 @@ func run(args []string) int {
 
 func runDiscover(args []string) int {
 	fs := flag.NewFlagSet("discover", flag.ExitOnError)
+	fs.Usage = func() { printUsage(fs.Output()) }
 	save := fs.Bool("save", false, "add found lamps to the config")
 	cfgPath := fs.String("config", config.DefaultPath(), "config file")
 	langFlag := fs.String("lang", "", "output language: ru or en")

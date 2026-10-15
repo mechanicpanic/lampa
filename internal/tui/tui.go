@@ -57,6 +57,8 @@ type Model struct {
 	lamps        bool // lamp picker open
 	lampCursor   int
 	hideSleeping bool
+	help         bool // help screen open
+	helpScroll   int
 	// display smoothing (the engine's values are raw, per analysis frame)
 	bands    [analysis.NumBands]float64
 	fps      map[string]float64
@@ -102,7 +104,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf(i18n.T("new lamps found: %d"), msg.added)
 		}
 	case tea.MouseMsg:
-		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && !m.picking && !m.lamps {
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && !m.picking && !m.lamps && !m.help {
 			return m, m.clickCmd(msg)
 		}
 		return m, nil
@@ -112,6 +114,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.lamps {
 			return m.updateLampPicker(msg)
+		}
+		if m.help {
+			return m.updateHelp(msg)
 		}
 		return m.updateKeys(msg)
 	}
@@ -156,6 +161,8 @@ func (m Model) updateKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.c.AdjustLatency(-10 * time.Millisecond)
 	case " ":
 		m.c.TogglePause()
+	case "?":
+		m.help, m.helpScroll = true, 0
 	case "l":
 		m.lamps, m.lampCursor = true, 0
 	case "t":
@@ -305,4 +312,16 @@ func (m Model) clickCmd(msg tea.MouseMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+func (m Model) updateHelp(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch k.String() {
+	case "up", "k":
+		m.helpScroll = max(0, m.helpScroll-1)
+	case "down", "j":
+		m.helpScroll++
+	case "esc", "q", "?", "enter":
+		m.help = false
+	}
+	return m, nil
 }

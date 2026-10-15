@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -197,5 +198,32 @@ func TestHideSleepingPersists(t *testing.T) {
 	c.SetHideSleeping(true)
 	if saved, _ := config.Load(path); !saved.HideSleeping || !c.HideSleeping() {
 		t.Fatalf("not saved: %+v", saved)
+	}
+}
+
+func TestUsageIsDetailed(t *testing.T) {
+	defer i18n.Set(i18n.Current())
+	i18n.Set(i18n.EN)
+	var b strings.Builder
+	printUsage(&b)
+	out := b.String()
+	for _, want := range []string{"discover", "--save", "--dry", "--wav", "--lang", "--config", "--tap",
+		"config.toml", "Meter", "brew upgrade lampa", "Examples"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("usage lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestWantsHelp(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"-h"}, {"--help"}, {"--lang", "en", "help"}, {"--lang=ru", "-h"}} {
+		if !wantsHelp(args) {
+			t.Fatalf("%v should show help", args)
+		}
+	}
+	for _, args := range [][]string{{}, {"--dry"}, {"discover"}, {"--wav", "help.wav"}} {
+		if wantsHelp(args) {
+			t.Fatalf("%v should not show help", args)
+		}
 	}
 }

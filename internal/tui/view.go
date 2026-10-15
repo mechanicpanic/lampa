@@ -76,6 +76,8 @@ func (m Model) View() string {
 		body = m.pickerView()
 	case m.lamps:
 		body = m.lampPickerView()
+	case m.help:
+		body = m.helpView(h - 2)
 	default:
 		body = m.mainView(inner, h-2)
 	}
@@ -442,7 +444,7 @@ func (m Model) notes() string {
 }
 
 var actionKeys = [][2]string{
-	{"s", "source"}, {"l", "lamps"}, {"d", "find"}, {"␣", "pause"}, {"t", "lang"}, {"q", "quit"},
+	{"s", "source"}, {"l", "lamps"}, {"d", "find"}, {"␣", "pause"}, {"t", "lang"}, {"?", "help"}, {"q", "quit"},
 }
 
 // actionLines: the actions with labels if they fit, otherwise keys only.
@@ -572,4 +574,60 @@ func (m Model) groupTile(it lampItem, width int) string {
 	}
 	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(border).
 		Width(cw).Render(strings.Join(lines, "\n"))
+}
+
+// helpLines: the help screen — [key, text] rows, "" key = section title.
+var helpLines = [][2]string{
+	{"", "Modes"},
+	{"1", "Pulse — every lamp flashes on the beat; stacked lamps rise floor by floor like a fountain"},
+	{"2", "Spectrum — each lamp follows a band: bass, mids or highs (in a group: bass at the bottom)"},
+	{"3", "Chase — the light jumps to the next lamp on every beat"},
+	{"4", "Ambient — slow drift for background music; tempo sets the speed, loudness the colour"},
+	{"5", "Drop — tension builds with the music, then a white flash on the drop"},
+	{"6", "Meter — a volume meter: the track's average sits half-way, loud moments and kicks go up"},
+	{"", "Settings"},
+	{"p", "palette — 11 colour palettes; the spectrum shows the current one"},
+	{"←→", "sensitivity — how easily beats are caught, and how far Meter swings"},
+	{"↑↓", "delay — move the light earlier or later to match your speakers"},
+	{"", "Lamps"},
+	{"l", "lamps list: space switches a lamp on/off, h hides sleeping lamps from this screen"},
+	{"click", "click a card to switch a lamp; in a group, click a floor bar or the group name"},
+	{"d", "find lamps on the network and add new ones to the config"},
+	{"", "Sound"},
+	{"s", "source — the whole system or one app (Spotify, a browser…)"},
+	{"", "Other"},
+	{"␣", "pause — lamps keep their last colour"},
+	{"t", "language — Russian / English"},
+	{"q", "quit — every lamp goes back to how it was"},
+	{"?", "help — this screen"},
+	{"", "Config"},
+	{"", "~/.config/lampa/config.toml — edit it with lampa closed (it saves on exit)"},
+	{"", "name = \"kitchen\" — what a card is called"},
+	{"", "role = \"bass\" | \"mid\" | \"high\" | \"lowmid\" | \"sub\" — the band a lamp follows in Spectrum"},
+	{"", "group = \"ikea\", level = 1 (bottom), 2, 3… — lamps stacked in one fixture"},
+}
+
+var helpSections = map[string]bool{"Modes": true, "Settings": true, "Lamps": true, "Sound": true, "Other": true, "Config": true}
+
+func (m Model) helpView(height int) []string {
+	var all []string
+	for _, l := range helpLines {
+		switch {
+		case l[0] == "" && helpSections[l[1]]:
+			if len(all) > 0 {
+				all = append(all, "")
+			}
+			all = append(all, accent.Render(i18n.T(l[1])))
+		case l[0] == "":
+			all = append(all, "  "+dim.Render(i18n.T(l[1])))
+		default:
+			all = append(all, fmt.Sprintf("  %s %s", soft.Render(fmt.Sprintf("%-5s", i18n.T(l[0]))), i18n.T(l[1])))
+		}
+	}
+	head := []string{accent.Render(i18n.T("✿ Help"))}
+	foot := []string{dim.Render(i18n.T("↑↓ scroll · esc close"))}
+	room := max(1, height-len(head)-len(foot))
+	start := min(m.helpScroll, max(0, len(all)-room))
+	end := min(len(all), start+room)
+	return append(append(head, all[start:end]...), foot...)
 }

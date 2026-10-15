@@ -44,7 +44,7 @@ bin/lampa --wav track.wav   # from a file
 bin/lampa --lang en         # English UI (default: Russian; press t to switch)
 ```
 
-Keys: `1–6` mode (Pulse, Spectrum, Chase, Ambient, Drop, Meter), `p` palette, `←/→` sensitivity, `↑/↓` light delay, `s` audio source, `l` choose lamps (on/off, remembered; `h` there hides sleeping lamps; or just click a card — a floor bar or the group name in a group), `d` find lamps, `t` language, `space` pause, `q` quit (lamps go back to how they were).
+Keys: `1–6` mode (Pulse, Spectrum, Chase, Ambient, Drop, Meter), `p` palette, `←/→` sensitivity, `↑/↓` light delay, `s` audio source, `l` choose lamps (on/off, remembered; `h` there hides sleeping lamps; or just click a card — a floor bar or the group name in a group), `d` find lamps, `t` language, `space` pause, `q` quit (lamps go back to how they were), `?` full help. `lampa help` in the terminal explains flags, keys and the config.
 
 ## Lamp roles
 

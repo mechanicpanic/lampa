@@ -440,3 +440,34 @@ func TestClickTogglesLamps(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpScreen(t *testing.T) {
+	c := &fakeCtl{view: richView(1)}
+	m := tea.Model(New(c))
+	m, _ = press(m, tea.WindowSizeMsg{Width: 100, Height: 50}, tickMsg(time.Now()), runes("?"))
+	out := ansi.Strip(m.View())
+	for _, want := range []string{"Pulse", "Spectrum", "Chase", "Ambient", "Drop", "Meter",
+		"palette", "sensitivity", "delay", "source", "lamps", "click", "hide", "find",
+		"pause", "language", "quit", "config.toml", "role", "group", "level"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("help lacks %q:\n%s", want, out)
+		}
+	}
+	m, _ = press(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if strings.Contains(ansi.Strip(m.View()), "config.toml") {
+		t.Fatal("esc should close help")
+	}
+	if !strings.Contains(ansi.Strip(m.View()), "? help") {
+		t.Fatal("action line should advertise ? help")
+	}
+}
+
+func TestHelpFitsSmallWindow(t *testing.T) {
+	c := &fakeCtl{view: richView(1)}
+	m := tea.Model(New(c))
+	m, _ = press(m, tea.WindowSizeMsg{Width: 50, Height: 14}, tickMsg(time.Now()), runes("?"))
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) > 14 {
+		t.Fatalf("help is %d lines in a 14-line window", len(lines))
+	}
+}
