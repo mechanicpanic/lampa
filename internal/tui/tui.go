@@ -4,10 +4,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"lampa/internal/analysis"
 	"lampa/internal/audio"
 	"lampa/internal/engine"
 	"lampa/internal/i18n"
@@ -50,11 +52,15 @@ type Model struct {
 	cursor     int
 	lamps      bool // lamp picker open
 	lampCursor int
-	status     string
+	// display smoothing (the engine's values are raw, per analysis frame)
+	bands    [analysis.NumBands]float64
+	fps      map[string]float64
+	lastTick time.Time
+	status   string
 }
 
 func New(c Controller) Model {
-	return Model{c: c, v: c.View(), width: 80, height: 24}
+	return Model{c: c, v: c.View(), width: 80, height: 24, fps: map[string]float64{}}
 }
 
 func tick() tea.Cmd {
@@ -67,6 +73,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tickMsg:
 		m.v = m.c.View()
+		m.smooth(time.Time(msg))
 		return m, tick()
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -175,4 +182,51 @@ func (m Model) updateLampPicker(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.lamps = false
 	}
 	return m, nil
+}
+
+const (
+	bandRelease = 150 * time.Millisecond // bars rise instantly, fall over ~this
+	fpsTau      = time.Second
+)
+
+// smooth eases the spectrum and lamp fps toward the engine's latest values,
+// so the screen doesn't twitch at every analysis frame.
+func (m *Model) smooth(now time.Time) {
+	dt := now.Sub(m.lastTick)
+	first := m.lastTick.IsZero() || dt <= 0 || dt > time.Second
+	m.lastTick = now
+	k := 1 - math.Exp(-dt.Seconds()/bandRelease.Seconds())
+	for i, v := range m.v.Features.Bands {
+		if first || v >= m.bands[i] {
+			m.bands[i] = v
+		} else {
+			m.bands[i] += (v - m.bands[i]) * k
+		}
+	}
+	kf := 1 - math.Exp(-dt.Seconds()/fpsTau.Seconds())
+	for _, l := range m.v.Lamps {
+		old, seen := m.fps[l.Info.ID]
+		if first || !seen {
+			m.fps[l.Info.ID] = l.Stats.FPS
+		} else {
+			m.fps[l.Info.ID] = old + (l.Stats.FPS-old)*kf
+		}
+	}
+}
+
+// shownFPS: a lamp keeping up shows its target rate; only real lag shows a
+// lower number. The raw 1-second count wobbles between 19 and 20.
+func (m Model) shownFPS(l engine.LampView) float64 {
+	target := l.Info.MaxFPS
+	if target <= 0 {
+		target = 20
+	}
+	fps, ok := m.fps[l.Info.ID]
+	if !ok {
+		fps = l.Stats.FPS
+	}
+	if fps >= 0.85*target {
+		return target
+	}
+	return fps
 }

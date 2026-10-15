@@ -103,3 +103,53 @@ func TestHelpWrapsBeforeDroppingLabels(t *testing.T) {
 		t.Fatalf("labels dropped although two lines fit:\n%s", out)
 	}
 }
+
+func fullestRow(out string) int {
+	best := 0
+	for _, l := range strings.Split(out, "\n") {
+		best = max(best, strings.Count(l, "█"))
+	}
+	return best
+}
+
+func TestSpectrumFallsSmoothly(t *testing.T) {
+	c := &fakeCtl{view: richView(0)}
+	m := tea.Model(New(c))
+	t0 := time.Now()
+	m, _ = press(m, tea.WindowSizeMsg{Width: 80, Height: 30}, tickMsg(t0))
+	for i := range c.view.Features.Bands {
+		c.view.Features.Bands[i] = 0 // music suddenly drops out
+	}
+	m, _ = press(m, tickMsg(t0.Add(33*time.Millisecond)))
+	if fullestRow(m.View()) == 0 {
+		t.Fatal("spectrum vanished in one frame — should fall smoothly")
+	}
+	for i := 2; i < 40; i++ {
+		m, _ = press(m, tickMsg(t0.Add(time.Duration(i)*33*time.Millisecond)))
+	}
+	if n := fullestRow(m.View()); n != 0 {
+		t.Fatalf("spectrum still up after 1.3 s of silence (%d blocks)", n)
+	}
+	for i := range c.view.Features.Bands {
+		c.view.Features.Bands[i] = 1
+	}
+	m, _ = press(m, tickMsg(t0.Add(41*33*time.Millisecond)))
+	if fullestRow(m.View()) != 76 {
+		t.Fatal("rise must be instant")
+	}
+}
+
+func TestFPSDoesNotFlicker(t *testing.T) {
+	c := &fakeCtl{view: richView(1)}
+	c.view.Lamps[0].Info.MaxFPS = 20
+	m := tea.Model(New(c))
+	t0 := time.Now()
+	m, _ = press(m, tea.WindowSizeMsg{Width: 80, Height: 30})
+	for i := 0; i < 30; i++ {
+		c.view.Lamps[0].Stats.FPS = float64(19 + i%2) // the 1 s window lands on 19 or 20
+		m, _ = press(m, tickMsg(t0.Add(time.Duration(i)*33*time.Millisecond)))
+		if out := m.View(); !strings.Contains(out, "20 fps") {
+			t.Fatalf("tick %d: fps display flickered:\n%s", i, out)
+		}
+	}
+}

@@ -101,7 +101,7 @@ func (m Model) mainView(inner, height int) []string {
 	specRows := max(2, min(12, height-fixed-len(tiles)))
 
 	out := []string{header, ""}
-	out = append(out, spectrum(v, inner, specRows)...)
+	out = append(out, spectrum(m.bands[:], v.Palette, inner, specRows)...)
 	out = append(out, ribbon(v.History, inner), "")
 	out = append(out, tiles...)
 	if pad := height - len(out) - 1 - len(status) - len(help); pad > 0 {
@@ -132,14 +132,13 @@ func (m Model) header(inner int) string {
 }
 
 // spectrum spreads the bands over exactly `width` columns.
-func spectrum(v engine.View, width, rows int) []string {
-	bands := v.Features.Bands[:]
+func spectrum(bands []float64, palette string, width, rows int) []string {
 	n := len(bands)
 	cols := make([]float64, width)
 	for c := range cols {
 		cols[c] = bands[c*n/width]
 	}
-	pal := paletteByName(v.Palette)
+	pal := paletteByName(palette)
 	styles := make([]lipgloss.Style, n)
 	for b := range styles {
 		styles[b] = lipgloss.NewStyle().Foreground(lipgloss.Color(pal.At(0.85 * float64(b) / float64(n)).ToRGB().Hex()))
@@ -233,7 +232,7 @@ func (m Model) cards(inner int) []string {
 	for i := 0; i < len(m.v.Lamps); i += per {
 		var row []string
 		for _, l := range m.v.Lamps[i:min(i+per, len(m.v.Lamps))] {
-			row = append(row, tile(l, tw))
+			row = append(row, tile(l, m.shownFPS(l), tw))
 		}
 		joined := lipgloss.JoinHorizontal(lipgloss.Top, intersperse(row, " ")...)
 		rows = append(rows, lipgloss.PlaceHorizontal(inner, lipgloss.Center, joined))
@@ -253,7 +252,7 @@ func intersperse(xs []string, sep string) []string {
 }
 
 // tile: a rounded card framed in the lamp's own color; the bar shows brightness.
-func tile(l engine.LampView, width int) string {
+func tile(l engine.LampView, fps float64, width int) string {
 	cw := width - 2
 	hex := l.Color.Hex()
 	fill := lipgloss.NewStyle().Foreground(lipgloss.Color(hex))
@@ -261,7 +260,7 @@ func tile(l engine.LampView, width int) string {
 	full := int(math.Round(l.Brightness * float64(cw)))
 	bar := fill.Render(strings.Repeat("█", full)) + fill.Faint(true).Render(strings.Repeat("░", cw-full))
 
-	status := ok.Render(fmt.Sprintf("♪ %.0f fps", l.Stats.FPS))
+	status := ok.Render(fmt.Sprintf("♪ %.0f fps", fps))
 	switch {
 	case !l.Enabled:
 		frame = border
