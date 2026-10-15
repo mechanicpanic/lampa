@@ -71,3 +71,24 @@ func TestHex(t *testing.T) {
 		t.Fatalf("hex %s", h)
 	}
 }
+
+func TestPalettes(t *testing.T) {
+	if len(Palettes) < 11 {
+		t.Fatalf("only %d palettes", len(Palettes))
+	}
+	seen := map[string]bool{}
+	for _, p := range Palettes {
+		if seen[p.Name] {
+			t.Fatalf("duplicate palette %q", p.Name)
+		}
+		seen[p.Name] = true
+		if len(p.Stops) < 3 {
+			t.Fatalf("%s: %d stops", p.Name, len(p.Stops))
+		}
+		for _, s := range p.Stops {
+			if s.L < 0.45 || s.L > 0.92 || s.C < 0.06 {
+				t.Fatalf("%s: stop %+v too dark, too pale or too grey for lamps", p.Name, s)
+			}
+		}
+	}
+}
