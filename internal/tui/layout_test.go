@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"lampa/internal/analysis"
 	"lampa/internal/color"
@@ -187,3 +188,47 @@ func TestHeartFadesOverTheBeat(t *testing.T) {
 		t.Fatalf("fade should pass through all %d steps, saw %v", heartLevels, seen)
 	}
 }
+
+func ribbonLine(out string) string {
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "•") || strings.Contains(l, "♥") && !strings.Contains(l, "lampa") {
+			return l
+		}
+	}
+	return ""
+}
+
+func TestRibbonScrollsOneColumnPerFrame(t *testing.T) {
+	v := richView(0)
+	v.History, v.Frames = nil, 0
+	c := &fakeCtl{view: v}
+	m := tea.Model(New(c))
+	t0 := time.Now()
+	m, _ = press(m, tea.WindowSizeMsg{Width: 80, Height: 30})
+	pos := -1
+	for i := 0; i < 20; i++ {
+		// ~3 analysis frames arrive per UI frame; a kick only in the first
+		n := 3
+		for k := 0; k < n; k++ {
+			c.view.History = append(c.view.History, engine.Marker{Low: i == 0 && k == 1})
+		}
+		c.view.Frames += uint64(n)
+		m, _ = press(m, tickMsg(t0.Add(time.Duration(i)*33*time.Millisecond)))
+		line := []rune(ansiStrip(ribbonLine(m.View())))
+		p := -1
+		for j, r := range line {
+			if r == '•' {
+				p = j
+			}
+		}
+		if p < 0 {
+			t.Fatalf("frame %d: kick vanished", i)
+		}
+		if pos >= 0 && p != pos-1 {
+			t.Fatalf("frame %d: kick moved from column %d to %d, want exactly one left", i, pos, p)
+		}
+		pos = p
+	}
+}
+
+func ansiStrip(s string) string { return ansi.Strip(s) }

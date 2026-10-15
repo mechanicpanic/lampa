@@ -54,6 +54,7 @@ type View struct {
 	AudioAlive  bool
 	Lamps       []LampView
 	History     []Marker
+	Frames      uint64 // analysis frames so far; lets the UI tell which markers are new
 }
 
 type lamp struct {
@@ -81,6 +82,7 @@ type Engine struct {
 	lastTime    time.Duration
 	timeBase    time.Duration // keeps Features.Time monotonic across analyzer re-creation
 	history     []Marker
+	frames      uint64
 	lastAudio   time.Time
 	runCtx      context.Context
 	cancelRuns  context.CancelFunc
@@ -265,6 +267,7 @@ func (e *Engine) step(f analysis.Features) {
 	}
 	e.last = f
 	e.history = append(e.history, Marker{Beat: f.Beat, Low: f.OnsetLow.Hit, High: f.OnsetHigh.Hit})
+	e.frames++
 	if len(e.history) > HistoryLen {
 		e.history = e.history[len(e.history)-HistoryLen:]
 	}
@@ -282,6 +285,7 @@ func (e *Engine) View() View {
 		Paused:      e.paused,
 		AudioAlive:  !e.lastAudio.IsZero() && time.Since(e.lastAudio) <= silenceAfter,
 		History:     append([]Marker(nil), e.history...),
+		Frames:      e.frames,
 	}
 	for _, lp := range e.lamps {
 		v.Lamps = append(v.Lamps, LampView{Info: lp.l.Info(), Enabled: lp.enabled, Stats: lp.r.Stats(), Color: lp.color, Brightness: lp.bright})

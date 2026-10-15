@@ -350,3 +350,17 @@ func TestDisableRestoresThenReenableResumes(t *testing.T) {
 		t.Fatal("re-enabled lamp not driven")
 	}
 }
+
+func TestViewCountsFrames(t *testing.T) {
+	e := started(t, light.NewVirtual(light.Info{ID: "a"}))
+	e.Process(audio.Block{Rate: 48000, Samples: make([]float32, 2048+512*9)})
+	if f := e.View().Frames; f != 10 {
+		t.Fatalf("frames %d, want 10", f)
+	}
+	for _, blk := range kicks(3, 48000) { // more than HistoryLen frames
+		e.Process(blk)
+	}
+	if v := e.View(); v.Frames <= HistoryLen || len(v.History) != HistoryLen {
+		t.Fatalf("frames %d history %d", v.Frames, len(v.History))
+	}
+}

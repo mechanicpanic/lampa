@@ -104,7 +104,7 @@ func (m Model) mainView(inner, height int) []string {
 
 	out := []string{header, ""}
 	out = append(out, spectrum(m.bands[:], v.Palette, inner, specRows)...)
-	out = append(out, ribbon(v.History, inner), "")
+	out = append(out, ribbon(m.ribbon, inner), "")
 	out = append(out, tiles...)
 	if pad := height - len(out) - 1 - len(status) - len(help); pad > 0 {
 		out = append(out, make([]string, pad)...)
@@ -165,25 +165,20 @@ func spectrum(bands []float64, palette string, width, rows int) []string {
 	return out
 }
 
-// ribbon: the last ~2 s of beats (♥), kicks (•) and hats (·).
-func ribbon(h []engine.Marker, width int) string {
-	if len(h) == 0 {
-		return dim.Render(strings.Repeat("·", width))
+// ribbon: newest column at the right; beats (♥), kicks (•), hats (·).
+func ribbon(cols []engine.Marker, width int) string {
+	if len(cols) > width {
+		cols = cols[len(cols)-width:]
 	}
 	var b strings.Builder
-	for c := 0; c < width; c++ {
-		lo := c * len(h) / width
-		hi := max(lo+1, (c+1)*len(h)/width)
-		var beat, low, high bool
-		for _, mk := range h[lo:min(hi, len(h))] {
-			beat, low, high = beat || mk.Beat, low || mk.Low, high || mk.High
-		}
+	b.WriteString(strings.Repeat(" ", width-len(cols)))
+	for _, mk := range cols {
 		switch {
-		case beat:
+		case mk.Beat:
 			b.WriteString(accent.Render("♥"))
-		case low:
+		case mk.Low:
 			b.WriteString(soft.Render("•"))
-		case high:
+		case mk.High:
 			b.WriteString(dim.Render("·"))
 		default:
 			b.WriteString(" ")

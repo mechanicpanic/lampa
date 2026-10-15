@@ -56,7 +56,10 @@ type Model struct {
 	bands    [analysis.NumBands]float64
 	fps      map[string]float64
 	lastTick time.Time
-	status   string
+	// ribbon: one column per UI frame, so markers glide left at a steady pace
+	ribbon     []engine.Marker
+	seenFrames uint64
+	status     string
 }
 
 func New(c Controller) Model {
@@ -74,6 +77,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		m.v = m.c.View()
 		m.smooth(time.Time(msg))
+		m.advanceRibbon()
 		return m, tick()
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -229,4 +233,25 @@ func (m Model) shownFPS(l engine.LampView) float64 {
 		return target
 	}
 	return fps
+}
+
+const ribbonMax = 512
+
+// advanceRibbon adds exactly one column per UI frame: the beats/kicks/hats
+// of all analysis frames that arrived since the previous one.
+func (m *Model) advanceRibbon() {
+	h, total := m.v.History, m.v.Frames
+	if total < m.seenFrames { // engine restarted
+		m.seenFrames = 0
+	}
+	n := int(min(total-m.seenFrames, uint64(len(h))))
+	m.seenFrames = total
+	var col engine.Marker
+	for _, mk := range h[len(h)-n:] {
+		col.Beat, col.Low, col.High = col.Beat || mk.Beat, col.Low || mk.Low, col.High || mk.High
+	}
+	m.ribbon = append(m.ribbon, col)
+	if len(m.ribbon) > ribbonMax {
+		m.ribbon = append(m.ribbon[:0], m.ribbon[len(m.ribbon)-ribbonMax:]...)
+	}
 }
