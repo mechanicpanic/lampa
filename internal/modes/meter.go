@@ -22,9 +22,8 @@ type Meter struct {
 }
 
 const (
-	meterAverage = 2500 * time.Millisecond
-	meterGain    = 3.0 // ±1/6 of loudness around the average spans the whole meter
-	meterKick    = 0.4 // how far a full-strength kick pushes the meter up
+	meterAverage = 1500 * time.Millisecond
+	meterKick    = 0.5 // how far a full-strength kick pushes the meter up
 	meterKickTau = 250 * time.Millisecond
 	meterFall    = 300 * time.Millisecond
 )
@@ -42,7 +41,7 @@ func (m *Meter) Update(f analysis.Features, c Context) Scene {
 	if f.OnsetLow.Hit {
 		m.kick = math.Max(m.kick, meterKick*f.OnsetLow.Strength)
 	}
-	target := clamp01(0.5 + (f.Loudness-m.avg)*meterGain + m.kick)
+	target := clamp01(0.5 + (f.Loudness-m.avg)*meterGain(c.Sensitivity) + m.kick)
 	if target >= m.level {
 		m.level = target // rise instantly
 	} else {
@@ -58,4 +57,14 @@ func (m *Meter) Update(f analysis.Features, c Context) Scene {
 		s[i] = Target{Color: c.Palette.At(0.6 * p.height()), Brightness: clamp01(b)}
 	}
 	return s
+}
+
+// meterGain: how many meters a unit of loudness swing is worth. Loudness
+// spans 30 dB, so at the default sensitivity (0.5 → 10) a ±1.5 dB breath of
+// the music already swings the meter from bottom to top; ←→ tunes it.
+func meterGain(sensitivity float64) float64 {
+	if sensitivity <= 0 {
+		sensitivity = 0.5
+	}
+	return 4 + 12*sensitivity
 }

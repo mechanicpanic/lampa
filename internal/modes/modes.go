@@ -19,8 +19,9 @@ type Target struct {
 type Scene []Target
 
 type Context struct {
-	Palette color.Palette
-	Lights  []light.Info
+	Palette     color.Palette
+	Lights      []light.Info
+	Sensitivity float64 // the user's ←→ knob, 0..1 (0 = unset → 0.5)
 }
 
 type Mode interface {

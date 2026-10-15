@@ -246,7 +246,7 @@ func (e *Engine) step(f analysis.Features) {
 			infos = append(infos, lp.l.Info())
 		}
 	}
-	scene := m.Update(f, modes.Context{Palette: color.Palettes[e.palette], Lights: infos})
+	scene := m.Update(f, modes.Context{Palette: color.Palettes[e.palette], Lights: infos, Sensitivity: e.sensitivity})
 	att, rel := m.Envelope()
 	dt := f.Time - e.lastTime
 	if dt <= 0 || dt > 100*time.Millisecond {

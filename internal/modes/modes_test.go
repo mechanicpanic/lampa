@@ -240,3 +240,28 @@ func TestMeterBreathesAroundTheAverage(t *testing.T) {
 		t.Fatal("Meter must be mode 6")
 	}
 }
+
+func meterSwing(t *testing.T, sens float64) float64 {
+	t.Helper()
+	m := &Meter{}
+	c := ikea()
+	c.Sensitivity = sens
+	lo, hi := 1.0, 0.0
+	for i := 0; i < 600; i++ { // 6 s of music breathing ±1.5 dB around its level
+		loud := 0.9 + 0.05*math.Sin(float64(i)/40)
+		m.Update(analysis.Features{Time: time.Duration(i) * 10 * time.Millisecond, Loudness: loud}, c)
+		if i > 200 {
+			lo, hi = math.Min(lo, m.level), math.Max(hi, m.level)
+		}
+	}
+	return hi - lo
+}
+
+func TestMeterIsSensitiveAndTunable(t *testing.T) {
+	if s := meterSwing(t, 0.5); s < 0.4 {
+		t.Fatalf("±1.5 dB of real music should swing the meter well (got %.2f of 1)", s)
+	}
+	if lo, hi := meterSwing(t, 0.2), meterSwing(t, 0.9); hi <= lo {
+		t.Fatalf("higher sensitivity should swing more: %.2f vs %.2f", lo, hi)
+	}
+}
