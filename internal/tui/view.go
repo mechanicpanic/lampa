@@ -116,10 +116,10 @@ func (m Model) mainView(inner, height int) []string {
 
 func (m Model) header(inner int) string {
 	v := m.v
-	heart := dim.Render("♡")
 	sure := v.Features.BPM > 0 && v.Features.Confidence >= minTempoConfidence
-	if sure && v.Features.BeatPhase < 0.18 {
-		heart = accent.Render("♥")
+	heart := dim.Render("♡")
+	if sure {
+		heart = heartGlyph(heartLevel(v.Features.BeatPhase))
 	}
 	bpm := dim.Render("— bpm")
 	if sure {
@@ -364,4 +364,33 @@ func (m Model) lampPickerView() []string {
 		out = append(out, dim.Render(i18n.T("no lamps — close this and press d")))
 	}
 	return append(out, "", dim.Render(i18n.T("↑↓ choose · space on/off · esc close")))
+}
+
+// The heart beats: full on the beat, then fades step by step until the next.
+const heartLevels = 4
+
+// heartGlyph renders at call time (styles depend on the detected terminal).
+func heartGlyph(level int) string {
+	switch level {
+	case 3:
+		return accent.Render("♥")
+	case 2:
+		return soft.Render("♥")
+	case 1:
+		return soft.Faint(true).Render("♥")
+	}
+	return dim.Render("♡")
+}
+
+// heartLevel: 3 on the beat, falling to 0 before the next one.
+func heartLevel(phase float64) int {
+	switch {
+	case phase < 0.15:
+		return 3
+	case phase < 0.35:
+		return 2
+	case phase < 0.6:
+		return 1
+	}
+	return 0
 }

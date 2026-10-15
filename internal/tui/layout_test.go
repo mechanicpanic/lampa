@@ -165,3 +165,25 @@ func TestUnsureTempoIsNotShown(t *testing.T) {
 		t.Fatalf("confident tempo hidden:\n%s", out)
 	}
 }
+
+func TestHeartFadesOverTheBeat(t *testing.T) {
+	prev := heartLevel(0)
+	if prev != heartLevels-1 {
+		t.Fatalf("heart not at full on the beat: %d", prev)
+	}
+	seen := map[int]bool{prev: true}
+	for p := 0.0; p < 1; p += 0.01 {
+		l := heartLevel(p)
+		if l > prev {
+			t.Fatalf("heart brightened mid-beat at phase %.2f", p)
+		}
+		if prev-l > 1 {
+			t.Fatalf("heart skipped a step at phase %.2f (%d → %d)", p, prev, l)
+		}
+		prev = l
+		seen[l] = true
+	}
+	if len(seen) != heartLevels || heartLevel(0.99) != 0 {
+		t.Fatalf("fade should pass through all %d steps, saw %v", heartLevels, seen)
+	}
+}
