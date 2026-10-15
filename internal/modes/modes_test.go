@@ -207,19 +207,34 @@ func TestPulseRisesLikeAFountain(t *testing.T) {
 	}
 }
 
-func TestMeterFillsFromTheBottom(t *testing.T) {
+func TestMeterBreathesAroundTheAverage(t *testing.T) {
 	m := &Meter{}
-	s := m.Update(analysis.Features{Loudness: 0.4}, ikea())
-	if s[bottom].Brightness != 1 || s[middle].Brightness < 0.1 || s[middle].Brightness > 0.3 || s[top].Brightness != 0 {
-		t.Fatalf("40%%: bottom/middle/top = %.2f/%.2f/%.2f", s[bottom].Brightness, s[middle].Brightness, s[top].Brightness)
+	var s Scene
+	now := time.Duration(0)
+	feed := func(loud float64, kick bool, d time.Duration) {
+		for end := now + d; now < end; now += 10 * time.Millisecond {
+			f := analysis.Features{Time: now, Loudness: loud}
+			if kick {
+				f.OnsetLow = analysis.Onset{Hit: true, Strength: 1}
+				kick = false
+			}
+			s = m.Update(f, ikea())
+		}
 	}
-	s = m.Update(analysis.Features{Time: 10 * time.Millisecond, Loudness: 1}, ikea())
-	if s[top].Brightness != 1 {
-		t.Fatalf("full loudness should light the top: %.2f", s[top].Brightness)
+	feed(0.95, false, 4*time.Second) // loud but steady: should sit mid-way, not fill up
+	if s[bottom].Brightness < 0.9 || s[top].Brightness > 0.2 {
+		t.Fatalf("steady music: bottom/middle/top = %.2f/%.2f/%.2f, want about half full",
+			s[bottom].Brightness, s[middle].Brightness, s[top].Brightness)
 	}
-	s = m.Update(analysis.Features{Time: 20 * time.Millisecond, Loudness: 0}, ikea())
-	if s[top].Brightness < 0.5 {
-		t.Fatal("meter should fall slowly, not drop in one frame")
+	feed(1.0, true, 20*time.Millisecond) // a kick on a louder moment
+	if s[top].Brightness < 0.8 {
+		t.Fatalf("a kick should throw the meter to the top: %.2f", s[top].Brightness)
+	}
+	feed(0.95, false, 2*time.Second)
+	feed(0.75, false, 600*time.Millisecond) // a quieter phrase
+	if s[middle].Brightness > 0.1 || s[top].Brightness > 0 {
+		t.Fatalf("quiet phrase should drop below the middle: %.2f/%.2f/%.2f",
+			s[bottom].Brightness, s[middle].Brightness, s[top].Brightness)
 	}
 	if Index("meter") != 5 || len(All()) != 6 {
 		t.Fatal("Meter must be mode 6")
