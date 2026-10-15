@@ -7,6 +7,7 @@ Your Mac's music → Yeelight and WiZ bulbs, in real time. A cozy terminal UI wi
 - Listens to the whole system or a single app (Core Audio process tap, no BlackHole needed)
 - Finds the beat and lands flashes *on* it, with latency compensation
 - Yeelight via **music mode** — no 60 commands/min limit; WiZ via local UDP
+- Shows the Now Playing track (any player that appears in Control Center)
 - Puts every lamp back the way it was when you quit
 
 ## Build
