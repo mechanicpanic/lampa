@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"lampa/internal/discovery"
@@ -70,5 +71,18 @@ func TestMerge(t *testing.T) {
 	}
 	if l := c.Lamps[1]; l.Kind != "yeelight" || !l.Music {
 		t.Fatalf("new lamp %+v", l)
+	}
+}
+
+func TestSaveOmitsZeroNumbers(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "c.toml")
+	c := Default()
+	c.Lamps = []Lamp{{Kind: "wiz", IP: "10.0.0.5", ID: "a", Name: "x"}}
+	if err := Save(p, c); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	if s := string(b); strings.Contains(s, "level") || strings.Contains(s, "max_fps") {
+		t.Fatalf("zero fields written:\n%s", s)
 	}
 }
