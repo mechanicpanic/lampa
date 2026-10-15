@@ -32,7 +32,27 @@ Keys: `1–5` mode (Pulse, Spectrum, Chase, Ambient, Drop), `p` palette, `←/�
 
 ## Lamp roles
 
-In the config, `role = "bass" | "mid" | "high" | "lowmid" | "sub"` sets which band a lamp follows in Spectrum mode.
+In Spectrum mode (`2`) every lamp follows one part of the sound. Set it per lamp in `~/.config/lampa/config.toml`:
+
+| `role` | follows |
+|---|---|
+| `"sub"` | sub-bass, below 60 Hz |
+| `"bass"` | bass and kick, 60–250 Hz |
+| `"lowmid"` | low mids, 250 Hz – 1 kHz |
+| `"mid"` | mids and vocals, 1–4 kHz |
+| `"high"` | hats and cymbals, above 4 kHz |
+
+```toml
+[[lamp]]
+  name = "hero"
+  role = "bass"
+
+[[lamp]]
+  name = "ceiling"
+  role = "high"
+```
+
+Lamps without a role take bass, mid and high in turn. Other modes ignore roles: Pulse flashes every lamp on the beat, Chase walks around them.
 
 ## Notes
 
