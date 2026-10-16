@@ -67,3 +67,34 @@ func TestProbeTargetsSweepSubnet(t *testing.T) {
 		t.Fatalf("a /16 must not be swept host by host (%d targets)", n)
 	}
 }
+
+func TestYeelightProbedDirectlyToo(t *testing.T) {
+	// Office routers often drop multicast; Yeelight answers the same search
+	// sent straight to its address.
+	_, n, _ := net.ParseCIDR("192.168.1.244/24")
+	n.IP = net.ParseIP("192.168.1.244").To4()
+	got := map[string]bool{}
+	for _, a := range yeelightTargets([]*net.IPNet{n}) {
+		got[a.String()] = true
+	}
+	for _, want := range []string{"239.255.255.250:1982", "192.168.1.182:1982", "192.168.1.1:1982"} {
+		if !got[want] {
+			t.Fatalf("%s not probed", want)
+		}
+	}
+	if got["192.168.1.244:1982"] {
+		t.Fatal("probing ourselves")
+	}
+}
+
+func TestPublicNetworksAreNotSwept(t *testing.T) {
+	// A university / office uplink on a public range must not get every
+	// address probed — that looks like a port scan.
+	n := &net.IPNet{IP: net.ParseIP("130.223.168.42").To4(), Mask: net.CIDRMask(22, 32)}
+	if got := len(yeelightTargets([]*net.IPNet{n})); got != 1 {
+		t.Fatalf("public net swept: %d targets (want only the multicast group)", got)
+	}
+	if got := len(wizTargets([]*net.IPNet{n})); got > 2 {
+		t.Fatalf("public net swept for WiZ: %d targets", got)
+	}
+}

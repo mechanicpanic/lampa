@@ -77,13 +77,15 @@ func Discover(ctx context.Context, wait time.Duration) ([]Found, error) {
 		return nil, err
 	}
 	defer conn.Close()
-	wizAddrs := wizTargets(localNets())
-	ssdpAddr := &net.UDPAddr{IP: net.IPv4(239, 255, 255, 250), Port: 1982}
+	nets := localNets()
+	wizAddrs, yeeAddrs := wizTargets(nets), yeelightTargets(nets)
 	probe := func() {
 		for _, a := range wizAddrs {
 			conn.WriteToUDP([]byte(`{"method":"getSystemConfig","params":{}}`), a)
 		}
-		conn.WriteToUDP([]byte(ssdpSearch), ssdpAddr)
+		for _, a := range yeeAddrs {
+			conn.WriteToUDP([]byte(ssdpSearch), a)
+		}
 	}
 	probe()
 	deadline := time.Now().Add(wait)
@@ -132,24 +134,57 @@ func Discover(ctx context.Context, wait time.Duration) ([]Found, error) {
 func wizTargets(nets []*net.IPNet) []*net.UDPAddr {
 	out := []*net.UDPAddr{{IP: net.IPv4bcast, Port: 38899}}
 	for _, n := range nets {
-		ip := n.IP.To4()
-		if ip == nil {
-			continue
+		if b := directedBroadcast(n); b != nil {
+			out = append(out, &net.UDPAddr{IP: b, Port: 38899})
 		}
-		mask := n.Mask
-		if len(mask) == net.IPv6len {
-			mask = mask[12:]
+		for _, h := range lanHosts(n) {
+			out = append(out, &net.UDPAddr{IP: h, Port: 38899})
 		}
-		bcast := make(net.IP, 4)
-		for i := range bcast {
-			bcast[i] = ip[i] | ^mask[i]
+	}
+	return out
+}
+
+// yeelightTargets: the SSDP multicast group, plus every host of our /24 —
+// many routers (offices, hotels) drop multicast, and Yeelight answers the
+// same search sent straight to its address.
+func yeelightTargets(nets []*net.IPNet) []*net.UDPAddr {
+	out := []*net.UDPAddr{{IP: net.IPv4(239, 255, 255, 250), Port: 1982}}
+	for _, n := range nets {
+		for _, h := range lanHosts(n) {
+			out = append(out, &net.UDPAddr{IP: h, Port: 1982})
 		}
-		out = append(out, &net.UDPAddr{IP: bcast, Port: 38899})
-		for h := 1; h <= 254; h++ {
-			if byte(h) == ip[3] {
-				continue
-			}
-			out = append(out, &net.UDPAddr{IP: net.IPv4(ip[0], ip[1], ip[2], byte(h)), Port: 38899})
+	}
+	return out
+}
+
+func directedBroadcast(n *net.IPNet) net.IP {
+	ip := n.IP.To4()
+	if ip == nil {
+		return nil
+	}
+	mask := n.Mask
+	if len(mask) == net.IPv6len {
+		mask = mask[12:]
+	}
+	b := make(net.IP, 4)
+	for i := range b {
+		b[i] = ip[i] | ^mask[i]
+	}
+	return b
+}
+
+// lanHosts: every other address of our own /24 — only on private networks
+// (home, office Wi-Fi). On a public range (a university uplink) probing
+// every address would look like a scan, so we don't.
+func lanHosts(n *net.IPNet) []net.IP {
+	ip := n.IP.To4()
+	if ip == nil || !ip.IsPrivate() {
+		return nil
+	}
+	var out []net.IP
+	for h := 1; h <= 254; h++ {
+		if byte(h) != ip[3] {
+			out = append(out, net.IPv4(ip[0], ip[1], ip[2], byte(h)))
 		}
 	}
 	return out
